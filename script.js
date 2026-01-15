@@ -143,11 +143,13 @@ const ensureAuthenticated = async () => {
 };
 
 const createRow = (item) => {
+  const poolName = getPoolName(item.assetPool);
   const tr = document.createElement("tr");
   tr.innerHTML = `
     <td>${item.date}</td>
     <td><span class="tag ${item.type}">${item.type === "income" ? "收入" : "支出"}</span></td>
     <td>${item.category}</td>
+    <td>${poolName || "-"}</td>
     <td>${formatCurrency(item.amount)}</td>
     <td>${item.note || "-"}</td>
     <td><button class="ghost" data-id="${item.id}">删除</button></td>
@@ -158,7 +160,7 @@ const createRow = (item) => {
 const renderEmptyState = () => {
   const tr = document.createElement("tr");
   const td = document.createElement("td");
-  td.colSpan = 6;
+  td.colSpan = 7;
   td.className = "empty-state";
   td.textContent = "暂无记录，先添加一笔吧。";
   tr.appendChild(td);
@@ -251,7 +253,8 @@ const renderBreakdown = (items) => {
 const getMonthItems = (items, month) => items.filter((item) => item.date.startsWith(month));
 
 const getAssetPoolTotal = () =>
-  assetPools.reduce((sum, pool) => sum + (Number(pool.amount) || 0), 0);
+  assetPools.reduce((sum, pool) => sum + (Number(pool.amount) || 0), 0) +
+  Object.values(walletBalances).reduce((sum, value) => sum + value, 0);
 
 const getDaysInMonth = (month) => {
   const [year, monthIndex] = month.split("-").map(Number);
@@ -339,9 +342,8 @@ const updateView = () => {
   renderSummary(monthItems);
   walletBalances = getWalletRemaining(monthItems);
   updateWalletBalances(walletBalances);
-  assetTotal.textContent = formatCurrency(
-    getAssetPoolTotal() + Object.values(walletBalances).reduce((sum, value) => sum + value, 0)
-  );
+  updateAssetPoolInputs();
+  assetTotal.textContent = formatCurrency(getAssetPoolTotal());
   renderBreakdown(monthItems);
   renderTrendChart(monthItems);
 };
@@ -393,10 +395,36 @@ const updateWalletBalances = (walletTotals) => {
   });
 };
 
+const updateAssetPoolInputs = () => {
+  const amountInputs = assetPoolList.querySelectorAll('input[data-field="amount"]');
+  amountInputs.forEach((input) => {
+    const index = Number(input.dataset.index);
+    if (Number.isNaN(index) || !assetPools[index]) {
+      return;
+    }
+    if (document.activeElement === input) {
+      return;
+    }
+    input.value = Number(assetPools[index].amount || 0).toFixed(2);
+  });
+};
+
 const getSelectablePools = () => [
   ...assetPools.map((pool) => ({ id: pool.id, name: pool.name, type: "pool" })),
   ...wallets.map((wallet) => ({ id: wallet.id, name: wallet.name, type: "wallet" })),
 ];
+
+const getPoolName = (poolId) => {
+  if (!poolId || poolId === "none") {
+    return "";
+  }
+  const fromPools = assetPools.find((pool) => pool.id === poolId);
+  if (fromPools) {
+    return fromPools.name;
+  }
+  const fromWallets = wallets.find((wallet) => wallet.id === poolId);
+  return fromWallets ? fromWallets.name : "";
+};
 
 const updateAssetPoolOptions = () => {
   const currentValue = assetPoolSelect.value;
@@ -464,8 +492,8 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
-  if (typeSelect.value === "expense" && assetPoolSelect.value === "none") {
-    alert("请选择支出对应的资产池。");
+  if (assetPoolSelect.value === "none") {
+    alert(typeSelect.value === "income" ? "请选择收入进入的资产池。" : "请选择支出对应的资产池。");
     return;
   }
 
@@ -486,6 +514,15 @@ form.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify(payload),
     });
+    if (selectedPool?.type === "pool") {
+      const poolIndex = assetPools.findIndex((pool) => pool.id === selectedPool.id);
+      if (poolIndex !== -1) {
+        const delta = payload.type === "income" ? payload.amount : -payload.amount;
+        assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
+        await savePools();
+        updateAssetPoolOptions();
+      }
+    }
     await fetchTransactions();
     updateView();
     resetForm();
@@ -516,7 +553,17 @@ transactionList.addEventListener("click", async (event) => {
   }
 
   try {
+    const toDelete = transactions.find((item) => item.id === id);
     await apiRequest(`/api/transactions/${id}`, { method: "DELETE" });
+    if (toDelete) {
+      const poolIndex = assetPools.findIndex((pool) => pool.id === toDelete.assetPool);
+      if (poolIndex !== -1) {
+        const delta = toDelete.type === "income" ? -toDelete.amount : toDelete.amount;
+        assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
+        await savePools();
+        updateAssetPoolOptions();
+      }
+    }
     await fetchTransactions();
     updateView();
   } catch (error) {
