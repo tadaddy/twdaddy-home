@@ -74,12 +74,25 @@ const getMonthStartDate = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 };
 
-const isWithinRange = (dateValue, startDate, endDate) => {
+const getTodayDate = () => new Date().toISOString().slice(0, 10);
+
+const normalizeDateRange = (startDate, endDate) => {
   if (!startDate && !endDate) {
+    return { start: "", end: "" };
+  }
+  let start = startDate || "0000-01-01";
+  let end = endDate || getTodayDate();
+  if (start && end && start > end) {
+    [start, end] = [end, start];
+  }
+  return { start, end };
+};
+
+const isWithinRange = (dateValue, startDate, endDate) => {
+  const { start, end } = normalizeDateRange(startDate, endDate);
+  if (!start && !end) {
     return true;
   }
-  const start = startDate || "0000-01-01";
-  const end = endDate || new Date().toISOString().slice(0, 10);
   return dateValue >= start && dateValue <= end;
 };
 
