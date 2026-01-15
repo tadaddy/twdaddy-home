@@ -117,10 +117,10 @@
 
       <section class="card">
         <header>
-          <h3>支出分布</h3>
-          <p>查看本月支出主要集中在哪些方向</p>
+          <h3>备忘录</h3>
+          <p>记录本月的重要事项或备注</p>
         </header>
-        <div id="categoryBreakdown" class="breakdown"></div>
+        <textarea id="memoInput" rows="6" placeholder="例如：房租缴费、保险到期等"></textarea>
       </section>
     </section>
 
@@ -183,6 +183,14 @@
         </div>
         <div class="chart-controls">
           <label class="chart-toggle">
+            开始日期
+            <input id="chartStartDate" type="date" />
+          </label>
+          <label class="chart-toggle">
+            结束日期
+            <input id="chartEndDate" type="date" />
+          </label>
+          <label class="chart-toggle">
             类目
             <select id="trendType">
               <option value="income">收入（柱状）</option>
@@ -214,6 +222,14 @@
           <p>记录保存在服务器端，家庭成员可共享查看</p>
         </div>
         <div class="table-actions">
+          <label class="mini-field">
+            全局日期范围
+            <div class="range-fields">
+              <input id="globalStartDate" type="date" />
+              <span>至</span>
+              <input id="globalEndDate" type="date" />
+            </div>
+          </label>
           <label class="mini-field">
             开始日期
             <input id="detailStartDate" type="date" />

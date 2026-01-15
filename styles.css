@@ -207,6 +207,16 @@ select {
   color: var(--text);
 }
 
+textarea {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+  color: var(--text);
+  resize: vertical;
+}
+
 button {
   cursor: pointer;
   border: none;
@@ -399,6 +409,17 @@ button.ghost {
   flex-wrap: wrap;
   gap: 0.8rem;
   align-items: flex-end;
+}
+
+.range-fields {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+}
+
+.range-fields input {
+  min-width: 140px;
 }
 
 .table-wrapper {

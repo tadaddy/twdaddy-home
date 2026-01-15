@@ -17,7 +17,6 @@ const expenseStartDate = document.querySelector("#expenseStartDate");
 const expenseEndDate = document.querySelector("#expenseEndDate");
 const assetPoolSelect = document.querySelector("#assetPoolSelect");
 const assetTotal = document.querySelector("#assetTotal");
-const breakdown = document.querySelector("#categoryBreakdown");
 const clearAllButton = document.querySelector("#clearAll");
 const detailStartDate = document.querySelector("#detailStartDate");
 const detailEndDate = document.querySelector("#detailEndDate");
@@ -25,11 +24,15 @@ const pageSize = document.querySelector("#pageSize");
 const prevPage = document.querySelector("#prevPage");
 const nextPage = document.querySelector("#nextPage");
 const pageInfo = document.querySelector("#pageInfo");
+const globalStartDate = document.querySelector("#globalStartDate");
+const globalEndDate = document.querySelector("#globalEndDate");
 const walletList = document.querySelector("#walletList");
 const trendType = document.querySelector("#trendType");
 const trendChart = document.querySelector("#trendChart");
 const trendZoom = document.querySelector("#trendZoom");
 const trendOffset = document.querySelector("#trendOffset");
+const chartStartDate = document.querySelector("#chartStartDate");
+const chartEndDate = document.querySelector("#chartEndDate");
 const assetPoolList = document.querySelector("#assetPoolList");
 const addAssetPool = document.querySelector("#addAssetPool");
 const transferForm = document.querySelector("#transferForm");
@@ -94,6 +97,23 @@ const isWithinRange = (dateValue, startDate, endDate) => {
     return true;
   }
   return dateValue >= start && dateValue <= end;
+};
+
+const applyGlobalDateRange = () => {
+  const start = globalStartDate.value || getMonthStartDate();
+  const end = globalEndDate.value || getTodayDate();
+  globalStartDate.value = start;
+  globalEndDate.value = end;
+  incomeStartDate.value = start;
+  incomeEndDate.value = end;
+  expenseStartDate.value = start;
+  expenseEndDate.value = end;
+  detailStartDate.value = start;
+  detailEndDate.value = end;
+  chartStartDate.value = start;
+  chartEndDate.value = end;
+  currentPage = 1;
+  updateView();
 };
 
 const apiRequest = async (url, options = {}) => {
@@ -272,53 +292,11 @@ const getWalletRemaining = (items) => {
   return totals;
 };
 
-const renderBreakdown = (items) => {
-  breakdown.innerHTML = "";
-  const expenseItems = items.filter((item) => item.type === "expense");
-  if (!expenseItems.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "暂无支出记录。";
-    breakdown.appendChild(empty);
-    return;
-  }
-
-  const totals = expenseItems.reduce((acc, item) => {
-    acc[item.category] = (acc[item.category] || 0) + item.amount;
-    return acc;
-  }, {});
-
-  const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-  const max = entries[0]?.[1] || 1;
-
-  entries.forEach(([category, amount]) => {
-    const item = document.createElement("div");
-    item.className = "breakdown-item";
-
-    const label = document.createElement("div");
-    label.innerHTML = `<strong>${category}</strong><div class="progress-bar"><span style="width:${
-      (amount / max) * 100
-    }%"></span></div>`;
-
-    const value = document.createElement("div");
-    value.textContent = formatCurrency(amount);
-
-    item.appendChild(label);
-    item.appendChild(value);
-    breakdown.appendChild(item);
-  });
-};
-
 const getMonthItems = (items, month) => items.filter((item) => item.date.startsWith(month));
 
 const getAssetPoolTotal = () =>
   assetPools.reduce((sum, pool) => sum + (Number(pool.amount) || 0), 0) +
   Object.values(walletBalances).reduce((sum, value) => sum + value, 0);
-
-const getDaysInMonth = (month) => {
-  const [year, monthIndex] = month.split("-").map(Number);
-  return new Date(year, monthIndex, 0).getDate();
-};
 
 const buildTrendSvg = (values, color, labels) => {
   const width = 640;
@@ -399,44 +377,63 @@ const buildBarSvg = (values, color, labels) => {
   `;
 };
 
+const getDateRange = (startValue, endValue) => {
+  const startFallback = getMonthStartDate();
+  const endFallback = getTodayDate();
+  const { start, end } = normalizeDateRange(startValue || startFallback, endValue || endFallback);
+  const dates = [];
+  const cursor = new Date(start);
+  const endDate = new Date(end);
+  while (cursor <= endDate) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+};
+
+const formatChartLabel = (dateValue, index) => {
+  const [year, month, day] = dateValue.split("-");
+  return index === 0 ? `${year}.${month}.${day}` : `${month}.${day}`;
+};
+
 const renderTrendChart = (items) => {
-  const currentMonth = getCurrentMonth();
-  const daysInMonth = getDaysInMonth(currentMonth);
-  const fullValues = Array.from({ length: daysInMonth }, () => 0);
   const mode = trendType.value;
+  const dateRange = getDateRange(chartStartDate.value, chartEndDate.value);
+  const dateIndex = new Map(dateRange.map((date, index) => [date, index]));
+  const fullValues = Array.from({ length: dateRange.length }, () => 0);
 
   const isWalletExpense = mode.endsWith("-expense");
   const isWalletAsset = mode.endsWith("-asset");
   const walletId = isWalletExpense || isWalletAsset ? mode.replace(/-(expense|asset)$/, "") : "";
 
   items.forEach((item) => {
-    const day = Number(item.date.split("-")[2]);
-    if (Number.isNaN(day) || day < 1 || day > daysInMonth) {
+    const index = dateIndex.get(item.date);
+    if (index === undefined) {
       return;
     }
     if (mode === "income" && item.type === "income") {
-      fullValues[day - 1] += item.amount;
+      fullValues[index] += item.amount;
     }
     if (mode === "expense" && item.type === "expense") {
-      fullValues[day - 1] += item.amount;
+      fullValues[index] += item.amount;
     }
     if (isWalletExpense && item.wallet === walletId && item.type === "expense") {
-      fullValues[day - 1] += item.amount;
+      fullValues[index] += item.amount;
     }
   });
 
   if (isWalletAsset) {
     const base = wallets.find((wallet) => wallet.id === walletId)?.monthlyBudget ?? 0;
-    const daily = Array.from({ length: daysInMonth }, () => base);
+    const daily = Array.from({ length: dateRange.length }, () => base);
     items
       .filter((item) => item.wallet === walletId)
       .forEach((item) => {
-        const day = Number(item.date.split("-")[2]);
-        if (Number.isNaN(day) || day < 1 || day > daysInMonth) {
+        const index = dateIndex.get(item.date);
+        if (index === undefined) {
           return;
         }
         const delta = item.type === "income" ? item.amount : -item.amount;
-        for (let i = day - 1; i < daysInMonth; i += 1) {
+        for (let i = index; i < dateRange.length; i += 1) {
           daily[i] += delta;
         }
       });
@@ -445,28 +442,32 @@ const renderTrendChart = (items) => {
 
   if (mode === "totalAssets") {
     const base = getAssetPoolTotal();
-    const daily = Array.from({ length: daysInMonth }, () => base);
+    const daily = Array.from({ length: dateRange.length }, () => base);
     items.forEach((item) => {
-      const day = Number(item.date.split("-")[2]);
-      if (Number.isNaN(day) || day < 1 || day > daysInMonth) {
+      const index = dateIndex.get(item.date);
+      if (index === undefined) {
         return;
       }
       const delta = item.type === "income" ? item.amount : -item.amount;
-      for (let i = day - 1; i < daysInMonth; i += 1) {
+      for (let i = index; i < dateRange.length; i += 1) {
         daily[i] += delta;
       }
     });
     fullValues.splice(0, fullValues.length, ...daily);
   }
 
-  const zoomDays = Number(trendZoom.value);
-  trendZoom.max = daysInMonth.toString();
-  trendOffset.max = Math.max(daysInMonth - zoomDays, 0).toString();
-  const offset = Math.min(Number(trendOffset.value), Math.max(daysInMonth - zoomDays, 0));
+  const maxZoom = Math.max(dateRange.length, 1);
+  trendZoom.max = maxZoom.toString();
+  const zoomDays = Math.min(Number(trendZoom.value), maxZoom);
+  trendZoom.value = zoomDays.toString();
+  trendOffset.max = Math.max(dateRange.length - zoomDays, 0).toString();
+  const offset = Math.min(Number(trendOffset.value), Math.max(dateRange.length - zoomDays, 0));
   trendOffset.value = offset.toString();
 
   const values = fullValues.slice(offset, offset + zoomDays);
-  const labels = values.map((_, index) => `${offset + index + 1}日`);
+  const labels = dateRange
+    .slice(offset, offset + zoomDays)
+    .map((dateValue, index) => formatChartLabel(dateValue, index));
   const color =
     mode === "income" || isWalletExpense
       ? "#16a34a"
@@ -495,7 +496,6 @@ const updateView = () => {
   updateWalletBalances(walletBalances);
   updateAssetPoolInputs();
   assetTotal.textContent = formatCurrency(getAssetPoolTotal());
-  renderBreakdown(monthItems);
   renderTrendChart(monthItems);
   pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
   prevPage.disabled = currentPage <= 1;
@@ -794,10 +794,14 @@ transactionList.addEventListener("click", async (event) => {
 trendType.addEventListener("change", updateView);
 trendZoom.addEventListener("input", updateView);
 trendOffset.addEventListener("input", updateView);
+chartStartDate.addEventListener("change", updateView);
+chartEndDate.addEventListener("change", updateView);
 incomeStartDate.addEventListener("change", updateView);
 incomeEndDate.addEventListener("change", updateView);
 expenseStartDate.addEventListener("change", updateView);
 expenseEndDate.addEventListener("change", updateView);
+globalStartDate.addEventListener("change", applyGlobalDateRange);
+globalEndDate.addEventListener("change", applyGlobalDateRange);
 detailStartDate.addEventListener("change", () => {
   currentPage = 1;
   updateView();
@@ -1155,11 +1159,9 @@ walletList.addEventListener("click", async (event) => {
   }
 });
 
-incomeStartDate.value = getMonthStartDate();
-incomeEndDate.valueAsDate = new Date();
-expenseStartDate.value = getMonthStartDate();
-expenseEndDate.valueAsDate = new Date();
-detailEndDate.valueAsDate = new Date();
+globalStartDate.value = getMonthStartDate();
+globalEndDate.value = getTodayDate();
+applyGlobalDateRange();
 assetPoolSelect.disabled = false;
 resetForm();
 transferDate.valueAsDate = new Date();
