@@ -151,6 +151,10 @@ main {
   color: var(--primary);
 }
 
+.summary-card.assets h2 {
+  color: #0ea5e9;
+}
+
 .layout-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -227,6 +231,61 @@ button.ghost {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+
+.wallet-card {
+  margin-bottom: 1.5rem;
+}
+
+.wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.wallet-item {
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: #f8fafc;
+}
+
+.wallet-balance {
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin: 0.3rem 0;
+  color: #0f172a;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.chart-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.chart {
+  background: #f8fafc;
+  border-radius: 1rem;
+  padding: 1rem;
+  min-height: 220px;
+  border: 1px solid var(--border);
+}
+
+.chart svg {
+  width: 100%;
+  height: 220px;
+  display: block;
 }
 
 .breakdown-item {

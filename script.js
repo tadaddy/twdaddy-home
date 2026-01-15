@@ -14,11 +14,18 @@ const incomeTotal = document.querySelector("#incomeTotal");
 const expenseTotal = document.querySelector("#expenseTotal");
 const balanceTotal = document.querySelector("#balanceTotal");
 const savingRate = document.querySelector("#savingRate");
+const assetTotal = document.querySelector("#assetTotal");
 const breakdown = document.querySelector("#categoryBreakdown");
 const clearAllButton = document.querySelector("#clearAll");
+const walletSelect = document.querySelector("#walletSelect");
+const walletABalance = document.querySelector("#walletABalance");
+const walletBBalance = document.querySelector("#walletBBalance");
+const trendType = document.querySelector("#trendType");
+const trendChart = document.querySelector("#trendChart");
 
 const AUTH_KEY = "twdaddy-home-auth";
 const DASHBOARD_PASSWORD = "0303";
+const WALLET_MONTHLY_BUDGET = 5000;
 let transactions = [];
 
 const formatCurrency = (value) =>
@@ -135,6 +142,24 @@ const renderSummary = (items) => {
   savingRate.textContent = `${rate.toFixed(1)}%`;
 };
 
+const getWalletRemaining = (items) => {
+  const walletTotals = {
+    walletA: WALLET_MONTHLY_BUDGET,
+    walletB: WALLET_MONTHLY_BUDGET,
+  };
+  items
+    .filter((item) => item.type === "expense")
+    .forEach((item) => {
+      if (item.wallet === "walletA") {
+        walletTotals.walletA -= item.amount;
+      }
+      if (item.wallet === "walletB") {
+        walletTotals.walletB -= item.amount;
+      }
+    });
+  return walletTotals;
+};
+
 const renderBreakdown = (items) => {
   breakdown.innerHTML = "";
   const expenseItems = items.filter((item) => item.type === "expense");
@@ -174,18 +199,89 @@ const renderBreakdown = (items) => {
 
 const getMonthItems = (items, month) => items.filter((item) => item.date.startsWith(month));
 
+const getDaysInMonth = (month) => {
+  const [year, monthIndex] = month.split("-").map(Number);
+  return new Date(year, monthIndex, 0).getDate();
+};
+
+const buildTrendSvg = (values, color) => {
+  const width = 640;
+  const height = 220;
+  const padding = 24;
+  const maxValue = Math.max(...values, 1);
+  const step = (width - padding * 2) / (values.length - 1 || 1);
+  const points = values
+    .map((value, index) => {
+      const x = padding + index * step;
+      const y = height - padding - (value / maxValue) * (height - padding * 2);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="趋势折线图">
+      <polyline
+        fill="none"
+        stroke="#e2e8f0"
+        stroke-width="2"
+        points="${padding},${height - padding} ${width - padding},${height - padding}"
+      />
+      <polyline
+        fill="none"
+        stroke="${color}"
+        stroke-width="3"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        points="${points}"
+      />
+    </svg>
+  `;
+};
+
+const renderTrendChart = (items) => {
+  const currentMonth = monthSelect.value;
+  const daysInMonth = getDaysInMonth(currentMonth);
+  const values = Array.from({ length: daysInMonth }, () => 0);
+  items
+    .filter((item) => item.type === trendType.value)
+    .forEach((item) => {
+      const day = Number(item.date.split("-")[2]);
+      if (!Number.isNaN(day) && day >= 1 && day <= daysInMonth) {
+        values[day - 1] += item.amount;
+      }
+    });
+
+  const color = trendType.value === "income" ? "#16a34a" : "#dc2626";
+  trendChart.innerHTML = buildTrendSvg(values, color);
+};
+
 const updateView = () => {
   const currentMonth = monthSelect.value;
   const monthItems = getMonthItems(transactions, currentMonth);
   const sorted = [...monthItems].sort((a, b) => b.date.localeCompare(a.date));
   renderTransactions(sorted);
   renderSummary(monthItems);
+  const wallets = getWalletRemaining(monthItems);
+  walletABalance.textContent = formatCurrency(wallets.walletA);
+  walletBBalance.textContent = formatCurrency(wallets.walletB);
+  assetTotal.textContent = formatCurrency(
+    monthItems
+      .filter((item) => item.type === "income")
+      .reduce((sum, item) => sum + item.amount, 0) -
+      monthItems
+        .filter((item) => item.type === "expense")
+        .reduce((sum, item) => sum + item.amount, 0) +
+      wallets.walletA +
+      wallets.walletB
+  );
   renderBreakdown(monthItems);
+  renderTrendChart(monthItems);
 };
 
 const resetForm = () => {
   typeSelect.value = "income";
   categoryInput.value = "";
+  walletSelect.value = "none";
   amountInput.value = "";
   dateInput.valueAsDate = new Date();
   noteInput.value = "";
@@ -203,10 +299,11 @@ form.addEventListener("submit", async (event) => {
   const payload = {
     id: Date.now().toString(),
     type: typeSelect.value,
-    category: categoryInput.value.trim(),
+    category: categoryInput.value.trim() || "其他",
     amount,
     date: dateInput.value,
     note: noteInput.value.trim(),
+    wallet: typeSelect.value === "expense" ? walletSelect.value : "none",
   };
 
   try {
@@ -254,6 +351,16 @@ transactionList.addEventListener("click", async (event) => {
 });
 
 monthSelect.addEventListener("change", updateView);
+trendType.addEventListener("change", updateView);
+
+typeSelect.addEventListener("change", () => {
+  if (typeSelect.value === "income") {
+    walletSelect.value = "none";
+    walletSelect.disabled = true;
+  } else {
+    walletSelect.disabled = false;
+  }
+});
 
 clearAllButton.addEventListener("click", async () => {
   if (!confirm("确认清空全部记录吗？此操作无法撤销。")) {
@@ -270,5 +377,6 @@ clearAllButton.addEventListener("click", async () => {
 });
 
 monthSelect.value = getCurrentMonth();
+walletSelect.disabled = true;
 resetForm();
 ensureAuthenticated();
