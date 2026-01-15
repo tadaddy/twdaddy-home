@@ -56,11 +56,21 @@ const fetchTransactions = async () => {
   }
 };
 
-const showDashboard = async () => {
+const hideOverlay = () => {
   authOverlay.classList.add("hidden");
+  authOverlay.style.display = "none";
+  authOverlay.setAttribute("aria-hidden", "true");
   app.classList.remove("hidden");
-  await fetchTransactions();
-  updateView();
+};
+
+const showDashboard = async () => {
+  hideOverlay();
+  try {
+    await fetchTransactions();
+    updateView();
+  } catch (error) {
+    console.error("初始化失败", error);
+  }
 };
 
 const setAuthenticated = async () => {
