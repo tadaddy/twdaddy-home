@@ -227,6 +227,10 @@ textarea {
   resize: vertical;
 }
 
+#memoInput {
+  min-height: 220px;
+}
+
 .memo-toolbar {
   display: flex;
   justify-content: space-between;
