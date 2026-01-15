@@ -31,6 +31,16 @@
         <h1>家庭财务看板</h1>
         <p class="subtitle">在电脑或手机上快速更新收入与支出，随时查看家庭现金流。</p>
       </div>
+      <div class="header-range">
+        <label class="mini-field">
+          全局日期范围
+          <div class="range-fields">
+            <input id="globalStartDate" type="date" />
+            <span>至</span>
+            <input id="globalEndDate" type="date" />
+          </div>
+        </label>
+      </div>
     </div>
   </header>
 
@@ -222,14 +232,6 @@
           <p>记录保存在服务器端，家庭成员可共享查看</p>
         </div>
         <div class="table-actions">
-          <label class="mini-field">
-            全局日期范围
-            <div class="range-fields">
-              <input id="globalStartDate" type="date" />
-              <span>至</span>
-              <input id="globalEndDate" type="date" />
-            </div>
-          </label>
           <label class="mini-field">
             开始日期
             <input id="detailStartDate" type="date" />

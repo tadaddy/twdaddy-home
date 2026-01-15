@@ -75,6 +75,16 @@ header.site-header {
   justify-content: space-between;
 }
 
+.header-range {
+  max-width: 360px;
+}
+
+@media (min-width: 900px) {
+  .header-range {
+    text-align: right;
+  }
+}
+
 .eyebrow {
   text-transform: uppercase;
   font-size: 0.85rem;
