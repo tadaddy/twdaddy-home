@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家庭财务看板</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <div id="authOverlay" class="auth-overlay">
+    <div class="auth-card">
+      <h2>进入家庭财务看板</h2>
+      <p>请输入家庭共享密码以继续。</p>
+      <form id="authForm">
+        <label>
+          密码
+          <input id="authPassword" type="password" inputmode="numeric" placeholder="请输入密码" required />
+        </label>
+        <button type="submit" class="primary">进入看板</button>
+      </form>
+      <p class="auth-hint">默认密码：0303（可在脚本中修改）</p>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="site-header">
+    <div class="header-content">
+      <div>
+        <p class="eyebrow">家庭财务</p>
+        <h1>家庭财务看板</h1>
+        <p class="subtitle">在电脑或手机上快速更新收入与支出，随时查看家庭现金流。</p>
+      </div>
+      <div class="month-picker">
+        <label for="monthSelect">查看月份</label>
+        <input id="monthSelect" type="month" />
+      </div>
+    </div>
+  </header>
+
+    <main>
+    <section class="summary-grid">
+      <article class="summary-card income">
+        <p>本月收入</p>
+        <h2 id="incomeTotal">¥0</h2>
+        <span class="hint">包含工资、奖金、其他入账</span>
+      </article>
+      <article class="summary-card expense">
+        <p>本月支出</p>
+        <h2 id="expenseTotal">¥0</h2>
+        <span class="hint">包含日常花费、还款等</span>
+      </article>
+      <article class="summary-card assets">
+        <p>总资产</p>
+        <h2 id="assetTotal">¥0</h2>
+        <span class="hint">全部资产池余额合计</span>
+      </article>
+    </section>
+
+    <section class="layout-grid">
+      <section class="card">
+        <header>
+          <h3>新增记录</h3>
+          <p>随时记录家庭的收入与支出</p>
+        </header>
+        <form id="transactionForm">
+          <div class="form-row">
+            <label>
+              类型
+              <select id="typeSelect" required>
+                <option value="income">收入</option>
+                <option value="expense">支出</option>
+              </select>
+            </label>
+            <label>
+              分类
+              <input id="categoryInput" type="text" placeholder="如：餐饮、房贷、工资（可选）" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              资产池
+              <select id="assetPoolSelect">
+                <option value="none">不使用</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              金额 (¥)
+              <input id="amountInput" type="number" min="0" step="0.01" placeholder="0.00" required />
+            </label>
+            <label>
+              日期
+              <input id="dateInput" type="date" required />
+            </label>
+          </div>
+          <label>
+            备注
+            <input id="noteInput" type="text" placeholder="可选：工资到账、孩子教育" />
+          </label>
+          <button type="submit" class="primary">保存记录</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <header>
+          <h3>支出分布</h3>
+          <p>查看本月支出主要集中在哪些方向</p>
+        </header>
+        <div id="categoryBreakdown" class="breakdown"></div>
+      </section>
+    </section>
+
+    <section class="card wallet-card">
+      <header>
+        <h3>临时钱包</h3>
+        <p>每月每个钱包自动补充 ¥5,000，用于控制支出。</p>
+      </header>
+      <div id="walletList" class="wallet-grid"></div>
+    </section>
+
+    <section class="card asset-pool-card">
+      <header>
+        <h3>资产池</h3>
+        <p>可自定义名称与金额，用于记录家庭的资金池。</p>
+      </header>
+      <div id="assetPoolList" class="asset-pool-list"></div>
+      <button id="addAssetPool" class="ghost" type="button">新增资产池</button>
+    </section>
+
+    <section class="card">
+      <header class="chart-header">
+        <div>
+          <h3>趋势折线图</h3>
+          <p>横坐标为日期，纵坐标为金额，可缩放查看。</p>
+        </div>
+        <div class="chart-controls">
+          <label class="chart-toggle">
+            类目
+            <select id="trendType">
+              <option value="income">收入</option>
+              <option value="expense">支出</option>
+              <option value="walletA">临时钱包 A</option>
+              <option value="walletB">临时钱包 B</option>
+            </select>
+          </label>
+          <label class="chart-toggle">
+            缩放
+            <input id="trendZoom" type="range" min="7" max="31" step="1" value="31" />
+          </label>
+          <label class="chart-toggle">
+            视窗
+            <input id="trendOffset" type="range" min="0" max="0" step="1" value="0" />
+          </label>
+        </div>
+      </header>
+      <div id="trendChart" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <header class="table-header">
+        <div>
+          <h3>本月流水</h3>
+          <p>记录保存在服务器端，家庭成员可共享查看</p>
+        </div>
+        <button id="clearAll" class="ghost" type="button">清空全部记录</button>
+      </header>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>类型</th>
+              <th>分类</th>
+              <th>金额</th>
+              <th>备注</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="transactionList"></tbody>
+        </table>
+      </div>
+    </section>
+    </main>
+
+    <footer>
+      <p>提示：建议定期备份服务器端的 data.json 文件。</p>
+    </footer>
+  </div>
+</body>
+</html>
