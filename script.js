@@ -12,11 +12,19 @@ const transactionList = document.querySelector("#transactionList");
 const incomeTotal = document.querySelector("#incomeTotal");
 const expenseTotal = document.querySelector("#expenseTotal");
 const incomeStartDate = document.querySelector("#incomeStartDate");
+const incomeEndDate = document.querySelector("#incomeEndDate");
 const expenseStartDate = document.querySelector("#expenseStartDate");
+const expenseEndDate = document.querySelector("#expenseEndDate");
 const assetPoolSelect = document.querySelector("#assetPoolSelect");
 const assetTotal = document.querySelector("#assetTotal");
 const breakdown = document.querySelector("#categoryBreakdown");
 const clearAllButton = document.querySelector("#clearAll");
+const detailStartDate = document.querySelector("#detailStartDate");
+const detailEndDate = document.querySelector("#detailEndDate");
+const pageSize = document.querySelector("#pageSize");
+const prevPage = document.querySelector("#prevPage");
+const nextPage = document.querySelector("#nextPage");
+const pageInfo = document.querySelector("#pageInfo");
 const walletList = document.querySelector("#walletList");
 const trendType = document.querySelector("#trendType");
 const trendChart = document.querySelector("#trendChart");
@@ -30,6 +38,15 @@ const transferTo = document.querySelector("#transferTo");
 const transferAmount = document.querySelector("#transferAmount");
 const transferDate = document.querySelector("#transferDate");
 const transferNote = document.querySelector("#transferNote");
+const editOverlay = document.querySelector("#editOverlay");
+const editForm = document.querySelector("#editForm");
+const editType = document.querySelector("#editType");
+const editAssetPool = document.querySelector("#editAssetPool");
+const editCategory = document.querySelector("#editCategory");
+const editAmount = document.querySelector("#editAmount");
+const editDate = document.querySelector("#editDate");
+const editNote = document.querySelector("#editNote");
+const cancelEdit = document.querySelector("#cancelEdit");
 
 const AUTH_KEY = "twdaddy-home-auth";
 const DASHBOARD_PASSWORD = "0303";
@@ -37,6 +54,8 @@ let transactions = [];
 let assetPools = [];
 let wallets = [];
 let walletBalances = {};
+let currentPage = 1;
+let editingItemId = null;
 
 const formatCurrency = (value) =>
   `¥${value.toLocaleString("zh-CN", {
@@ -55,11 +74,13 @@ const getMonthStartDate = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 };
 
-const isOnOrAfter = (dateValue, startDate) => {
-  if (!startDate) {
+const isWithinRange = (dateValue, startDate, endDate) => {
+  if (!startDate && !endDate) {
     return true;
   }
-  return dateValue >= startDate;
+  const start = startDate || "0000-01-01";
+  const end = endDate || new Date().toISOString().slice(0, 10);
+  return dateValue >= start && dateValue <= end;
 };
 
 const apiRequest = async (url, options = {}) => {
@@ -172,7 +193,10 @@ const createRow = (item) => {
     <td>${poolName || "-"}</td>
     <td>${formatCurrency(item.amount)}</td>
     <td>${item.note || "-"}</td>
-    <td><button class="ghost" data-id="${item.id}">删除</button></td>
+    <td>
+      <button class="ghost" data-id="${item.id}" data-action="edit">编辑</button>
+      <button class="ghost" data-id="${item.id}" data-action="delete">删除</button>
+    </td>
   `;
   return tr;
 };
@@ -202,11 +226,11 @@ const renderTransactions = (items) => {
 const renderSummary = (items) => {
   const income = items
     .filter((item) => item.type === "income")
-    .filter((item) => isOnOrAfter(item.date, incomeStartDate.value))
+    .filter((item) => isWithinRange(item.date, incomeStartDate.value, incomeEndDate.value))
     .reduce((sum, item) => sum + item.amount, 0);
   const expense = items
     .filter((item) => item.type === "expense")
-    .filter((item) => isOnOrAfter(item.date, expenseStartDate.value))
+    .filter((item) => isWithinRange(item.date, expenseStartDate.value, expenseEndDate.value))
     .reduce((sum, item) => sum + item.amount, 0);
 
   incomeTotal.textContent = formatCurrency(income);
@@ -441,10 +465,18 @@ const renderTrendChart = (items) => {
 };
 
 const updateView = () => {
-  const currentMonth = getCurrentMonth();
-  const monthItems = getMonthItems(transactions, currentMonth);
+  const monthItems = transactions;
   const sorted = [...monthItems].sort((a, b) => b.date.localeCompare(a.date));
-  renderTransactions(sorted);
+  const filtered = sorted.filter((item) =>
+    isWithinRange(item.date, detailStartDate.value, detailEndDate.value)
+  );
+  const pageSizeValue = Number(pageSize.value);
+  const totalPages = Math.max(Math.ceil(filtered.length / pageSizeValue), 1);
+  currentPage = Math.min(currentPage, totalPages);
+  const startIndex = (currentPage - 1) * pageSizeValue;
+  const pageItems = filtered.slice(startIndex, startIndex + pageSizeValue);
+
+  renderTransactions(pageItems);
   renderSummary(monthItems);
   walletBalances = getWalletRemaining(monthItems);
   updateWalletBalances(walletBalances);
@@ -452,6 +484,9 @@ const updateView = () => {
   assetTotal.textContent = formatCurrency(getAssetPoolTotal());
   renderBreakdown(monthItems);
   renderTrendChart(monthItems);
+  pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
+  prevPage.disabled = currentPage <= 1;
+  nextPage.disabled = currentPage >= totalPages;
 };
 
 const renderWallets = () => {
@@ -558,6 +593,37 @@ const updateTransferOptions = () => {
   }
 };
 
+const updateEditAssetPoolOptions = () => {
+  const pools = getSelectablePools();
+  editAssetPool.innerHTML = pools.map((pool) => `<option value="${pool.id}">${pool.name}</option>`).join("");
+};
+
+const applyPoolDelta = (poolId, delta) => {
+  const poolIndex = assetPools.findIndex((pool) => pool.id === poolId);
+  if (poolIndex !== -1) {
+    assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
+  }
+};
+
+const transactionImpact = (item) => (item.type === "income" ? item.amount : -item.amount);
+
+const openEditModal = (item) => {
+  editingItemId = item.id;
+  editType.value = item.type;
+  updateEditAssetPoolOptions();
+  editAssetPool.value = item.assetPool;
+  editCategory.value = item.category;
+  editAmount.value = item.amount;
+  editDate.value = item.date;
+  editNote.value = item.note || "";
+  editOverlay.classList.remove("hidden");
+};
+
+const closeEditModal = () => {
+  editOverlay.classList.add("hidden");
+  editingItemId = null;
+};
+
 const updateTrendOptions = () => {
   const currentValue = trendType.value;
   const walletOptions = wallets
@@ -645,14 +711,12 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify(payload),
     });
     if (selectedPool?.type === "pool") {
-      const poolIndex = assetPools.findIndex((pool) => pool.id === selectedPool.id);
-      if (poolIndex !== -1) {
-        const delta = payload.type === "income" ? payload.amount : -payload.amount;
-        assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
-        await savePools();
-        renderAssetPools();
-        updateAssetPoolOptions();
-      }
+      const delta = payload.type === "income" ? payload.amount : -payload.amount;
+      applyPoolDelta(selectedPool.id, delta);
+      await savePools();
+      renderAssetPools();
+      updateAssetPoolOptions();
+      updateTransferOptions();
     }
     await fetchTransactions();
     updateView();
@@ -683,18 +747,28 @@ transactionList.addEventListener("click", async (event) => {
     return;
   }
 
+  if (target.dataset.action === "edit") {
+    const item = transactions.find((entry) => entry.id === id);
+    if (item) {
+      openEditModal(item);
+    }
+    return;
+  }
+
+  if (target.dataset.action !== "delete") {
+    return;
+  }
+
   try {
     const toDelete = transactions.find((item) => item.id === id);
     await apiRequest(`/api/transactions/${id}`, { method: "DELETE" });
-    if (toDelete) {
-      const poolIndex = assetPools.findIndex((pool) => pool.id === toDelete.assetPool);
-      if (poolIndex !== -1) {
-        const delta = toDelete.type === "income" ? -toDelete.amount : toDelete.amount;
-        assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
-        await savePools();
-        renderAssetPools();
-        updateAssetPoolOptions();
-      }
+    if (toDelete && !toDelete.assetPool.startsWith("wallet")) {
+      const delta = toDelete.type === "income" ? -toDelete.amount : toDelete.amount;
+      applyPoolDelta(toDelete.assetPool, delta);
+      await savePools();
+      renderAssetPools();
+      updateAssetPoolOptions();
+      updateTransferOptions();
     }
     await fetchTransactions();
     updateView();
@@ -708,7 +782,31 @@ trendType.addEventListener("change", updateView);
 trendZoom.addEventListener("input", updateView);
 trendOffset.addEventListener("input", updateView);
 incomeStartDate.addEventListener("change", updateView);
+incomeEndDate.addEventListener("change", updateView);
 expenseStartDate.addEventListener("change", updateView);
+expenseEndDate.addEventListener("change", updateView);
+detailStartDate.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
+detailEndDate.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
+pageSize.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
+prevPage.addEventListener("click", () => {
+  if (currentPage > 1) {
+    currentPage -= 1;
+    updateView();
+  }
+});
+nextPage.addEventListener("click", () => {
+  currentPage += 1;
+  updateView();
+});
 
 typeSelect.addEventListener("change", () => {
   assetPoolSelect.disabled = false;
@@ -819,6 +917,74 @@ transferForm.addEventListener("submit", async (event) => {
     alert("互转失败，请稍后再试。");
   }
 });
+
+editForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!editingItemId) {
+    return;
+  }
+  const amount = Number.parseFloat(editAmount.value);
+  if (Number.isNaN(amount) || amount <= 0) {
+    alert("请输入有效金额。");
+    return;
+  }
+  if (!editDate.value) {
+    alert("请选择日期。");
+    return;
+  }
+  const selectedPool = getSelectablePools().find((pool) => pool.id === editAssetPool.value);
+  if (!selectedPool) {
+    alert("请选择资产池。");
+    return;
+  }
+
+  const original = transactions.find((item) => item.id === editingItemId);
+  if (!original) {
+    closeEditModal();
+    return;
+  }
+
+  const updated = {
+    ...original,
+    type: editType.value,
+    category: editCategory.value.trim() || "其他",
+    amount,
+    date: editDate.value,
+    note: editNote.value.trim(),
+    assetPool: editAssetPool.value,
+    wallet: selectedPool.type === "wallet" ? selectedPool.id : "none",
+  };
+
+  try {
+    await apiRequest(`/api/transactions/${original.id}`, { method: "DELETE" });
+    await apiRequest("/api/transactions", {
+      method: "POST",
+      body: JSON.stringify(updated),
+    });
+
+    const oldImpact = transactionImpact(original);
+    const newImpact = transactionImpact(updated);
+    if (original.assetPool && !original.assetPool.startsWith("wallet")) {
+      applyPoolDelta(original.assetPool, -oldImpact);
+    }
+    if (updated.assetPool && !updated.assetPool.startsWith("wallet")) {
+      applyPoolDelta(updated.assetPool, newImpact);
+    }
+    await savePools();
+    renderAssetPools();
+    updateAssetPoolOptions();
+    updateTransferOptions();
+
+    await fetchTransactions();
+    updateView();
+    closeEditModal();
+  } catch (error) {
+    console.error("更新失败", error);
+    alert("更新失败，请稍后再试。");
+  }
+});
+
+cancelEdit.addEventListener("click", closeEditModal);
 
 addAssetPool.addEventListener("click", async () => {
   assetPools.push({
@@ -971,7 +1137,10 @@ walletList.addEventListener("click", async (event) => {
 });
 
 incomeStartDate.value = getMonthStartDate();
+incomeEndDate.valueAsDate = new Date();
 expenseStartDate.value = getMonthStartDate();
+expenseEndDate.valueAsDate = new Date();
+detailEndDate.valueAsDate = new Date();
 assetPoolSelect.disabled = false;
 resetForm();
 transferDate.valueAsDate = new Date();
