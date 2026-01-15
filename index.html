@@ -31,23 +31,27 @@
         <h1>家庭财务看板</h1>
         <p class="subtitle">在电脑或手机上快速更新收入与支出，随时查看家庭现金流。</p>
       </div>
-      <div class="month-picker">
-        <label for="monthSelect">查看月份</label>
-        <input id="monthSelect" type="month" />
-      </div>
     </div>
   </header>
 
     <main>
     <section class="summary-grid">
       <article class="summary-card income">
-        <p>本月收入</p>
+        <p>收入</p>
         <h2 id="incomeTotal">¥0</h2>
+        <label class="mini-field">
+          起始日期
+          <input id="incomeStartDate" type="date" />
+        </label>
         <span class="hint">包含工资、奖金、其他入账</span>
       </article>
       <article class="summary-card expense">
-        <p>本月支出</p>
+        <p>支出</p>
         <h2 id="expenseTotal">¥0</h2>
+        <label class="mini-field">
+          起始日期
+          <input id="expenseStartDate" type="date" />
+        </label>
         <span class="hint">包含日常花费、还款等</span>
       </article>
       <article class="summary-card assets">
@@ -173,10 +177,13 @@
           <label class="chart-toggle">
             类目
             <select id="trendType">
-              <option value="income">收入</option>
-              <option value="expense">支出</option>
-              <option value="walletA">临时钱包 A</option>
-              <option value="walletB">临时钱包 B</option>
+              <option value="income">收入（柱状）</option>
+              <option value="expense">支出（柱状）</option>
+              <option value="totalAssets">总资产（折线）</option>
+              <option value="walletA-expense">临时钱包 A 支出（柱状）</option>
+              <option value="walletA-asset">临时钱包 A 资产（折线）</option>
+              <option value="walletB-expense">临时钱包 B 支出（柱状）</option>
+              <option value="walletB-asset">临时钱包 B 资产（折线）</option>
             </select>
           </label>
           <label class="chart-toggle">

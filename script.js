@@ -8,10 +8,11 @@ const categoryInput = document.querySelector("#categoryInput");
 const amountInput = document.querySelector("#amountInput");
 const dateInput = document.querySelector("#dateInput");
 const noteInput = document.querySelector("#noteInput");
-const monthSelect = document.querySelector("#monthSelect");
 const transactionList = document.querySelector("#transactionList");
 const incomeTotal = document.querySelector("#incomeTotal");
 const expenseTotal = document.querySelector("#expenseTotal");
+const incomeStartDate = document.querySelector("#incomeStartDate");
+const expenseStartDate = document.querySelector("#expenseStartDate");
 const assetPoolSelect = document.querySelector("#assetPoolSelect");
 const assetTotal = document.querySelector("#assetTotal");
 const breakdown = document.querySelector("#categoryBreakdown");
@@ -47,6 +48,18 @@ const getCurrentMonth = () => {
   const now = new Date();
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   return month;
+};
+
+const getMonthStartDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+};
+
+const isOnOrAfter = (dateValue, startDate) => {
+  if (!startDate) {
+    return true;
+  }
+  return dateValue >= startDate;
 };
 
 const apiRequest = async (url, options = {}) => {
@@ -189,9 +202,11 @@ const renderTransactions = (items) => {
 const renderSummary = (items) => {
   const income = items
     .filter((item) => item.type === "income")
+    .filter((item) => isOnOrAfter(item.date, incomeStartDate.value))
     .reduce((sum, item) => sum + item.amount, 0);
   const expense = items
     .filter((item) => item.type === "expense")
+    .filter((item) => isOnOrAfter(item.date, expenseStartDate.value))
     .reduce((sum, item) => sum + item.amount, 0);
 
   incomeTotal.textContent = formatCurrency(income);
@@ -310,23 +325,102 @@ const buildTrendSvg = (values, color, labels) => {
   `;
 };
 
+const buildBarSvg = (values, color, labels) => {
+  const width = 640;
+  const height = 220;
+  const padding = 24;
+  const maxValue = Math.max(...values, 1);
+  const barWidth = (width - padding * 2) / values.length;
+
+  const bars = values
+    .map((value, index) => {
+      const barHeight = (value / maxValue) * (height - padding * 2);
+      const x = padding + index * barWidth;
+      const y = height - padding - barHeight;
+      return `<rect x="${x + 2}" y="${y}" width="${Math.max(barWidth - 4, 1)}" height="${barHeight}" fill="${color}" rx="3" />`;
+    })
+    .join("");
+
+  const labelPoints = labels
+    .map((label, index) => {
+      if (index % Math.ceil(labels.length / 6) !== 0 && index !== labels.length - 1) {
+        return "";
+      }
+      const x = padding + index * barWidth + barWidth / 2;
+      return `<text x="${x}" y="${height - 6}" font-size="10" fill="#94a3b8" text-anchor="middle">${label}</text>`;
+    })
+    .join("");
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="趋势柱状图">
+      <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="#e2e8f0" stroke-width="2" />
+      <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="#e2e8f0" stroke-width="2" />
+      ${bars}
+      ${labelPoints}
+      <text x="${padding}" y="${padding - 8}" font-size="10" fill="#94a3b8">¥${maxValue.toFixed(0)}</text>
+    </svg>
+  `;
+};
+
 const renderTrendChart = (items) => {
-  const currentMonth = monthSelect.value;
+  const currentMonth = getCurrentMonth();
   const daysInMonth = getDaysInMonth(currentMonth);
   const fullValues = Array.from({ length: daysInMonth }, () => 0);
-  items
-    .filter((item) => {
-      if (trendType.value === "income" || trendType.value === "expense") {
-        return item.type === trendType.value;
-      }
-      return item.wallet === trendType.value;
-    })
-    .forEach((item) => {
+  const mode = trendType.value;
+
+  const isWalletExpense = mode.endsWith("-expense");
+  const isWalletAsset = mode.endsWith("-asset");
+  const walletId = isWalletExpense || isWalletAsset ? mode.replace(/-(expense|asset)$/, "") : "";
+
+  items.forEach((item) => {
+    const day = Number(item.date.split("-")[2]);
+    if (Number.isNaN(day) || day < 1 || day > daysInMonth) {
+      return;
+    }
+    if (mode === "income" && item.type === "income") {
+      fullValues[day - 1] += item.amount;
+    }
+    if (mode === "expense" && item.type === "expense") {
+      fullValues[day - 1] += item.amount;
+    }
+    if (isWalletExpense && item.wallet === walletId && item.type === "expense") {
+      fullValues[day - 1] += item.amount;
+    }
+  });
+
+  if (isWalletAsset) {
+    const base = wallets.find((wallet) => wallet.id === walletId)?.monthlyBudget ?? 0;
+    const daily = Array.from({ length: daysInMonth }, () => base);
+    items
+      .filter((item) => item.wallet === walletId)
+      .forEach((item) => {
+        const day = Number(item.date.split("-")[2]);
+        if (Number.isNaN(day) || day < 1 || day > daysInMonth) {
+          return;
+        }
+        const delta = item.type === "income" ? item.amount : -item.amount;
+        for (let i = day - 1; i < daysInMonth; i += 1) {
+          daily[i] += delta;
+        }
+      });
+    fullValues.splice(0, fullValues.length, ...daily);
+  }
+
+  if (mode === "totalAssets") {
+    const base = getAssetPoolTotal();
+    const daily = Array.from({ length: daysInMonth }, () => base);
+    items.forEach((item) => {
       const day = Number(item.date.split("-")[2]);
-      if (!Number.isNaN(day) && day >= 1 && day <= daysInMonth) {
-        fullValues[day - 1] += item.amount;
+      if (Number.isNaN(day) || day < 1 || day > daysInMonth) {
+        return;
+      }
+      const delta = item.type === "income" ? item.amount : -item.amount;
+      for (let i = day - 1; i < daysInMonth; i += 1) {
+        daily[i] += delta;
       }
     });
+    fullValues.splice(0, fullValues.length, ...daily);
+  }
 
   const zoomDays = Number(trendZoom.value);
   trendZoom.max = daysInMonth.toString();
@@ -337,12 +431,17 @@ const renderTrendChart = (items) => {
   const values = fullValues.slice(offset, offset + zoomDays);
   const labels = values.map((_, index) => `${offset + index + 1}日`);
   const color =
-    trendType.value === "income" ? "#16a34a" : trendType.value === "expense" ? "#dc2626" : "#0ea5e9";
-  trendChart.innerHTML = buildTrendSvg(values, color, labels);
+    mode === "income" || isWalletExpense
+      ? "#16a34a"
+      : mode === "expense"
+        ? "#dc2626"
+        : "#0ea5e9";
+  const isBar = ["income", "expense"].includes(mode) || isWalletExpense;
+  trendChart.innerHTML = isBar ? buildBarSvg(values, color, labels) : buildTrendSvg(values, color, labels);
 };
 
 const updateView = () => {
-  const currentMonth = monthSelect.value;
+  const currentMonth = getCurrentMonth();
   const monthItems = getMonthItems(transactions, currentMonth);
   const sorted = [...monthItems].sort((a, b) => b.date.localeCompare(a.date));
   renderTransactions(sorted);
@@ -461,10 +560,19 @@ const updateTransferOptions = () => {
 
 const updateTrendOptions = () => {
   const currentValue = trendType.value;
+  const walletOptions = wallets
+    .map(
+      (wallet) => `
+        <option value="${wallet.id}-expense">${wallet.name} 支出（柱状）</option>
+        <option value="${wallet.id}-asset">${wallet.name} 资产（折线）</option>
+      `
+    )
+    .join("");
   trendType.innerHTML = `
-    <option value="income">收入</option>
-    <option value="expense">支出</option>
-    ${wallets.map((wallet) => `<option value="${wallet.id}">${wallet.name}</option>`).join("")}
+    <option value="income">收入（柱状）</option>
+    <option value="expense">支出（柱状）</option>
+    <option value="totalAssets">总资产（折线）</option>
+    ${walletOptions}
   `;
   if (trendType.querySelector(`option[value="${currentValue}"]`)) {
     trendType.value = currentValue;
@@ -596,10 +704,11 @@ transactionList.addEventListener("click", async (event) => {
   }
 });
 
-monthSelect.addEventListener("change", updateView);
 trendType.addEventListener("change", updateView);
 trendZoom.addEventListener("input", updateView);
 trendOffset.addEventListener("input", updateView);
+incomeStartDate.addEventListener("change", updateView);
+expenseStartDate.addEventListener("change", updateView);
 
 typeSelect.addEventListener("change", () => {
   assetPoolSelect.disabled = false;
@@ -830,7 +939,7 @@ walletList.addEventListener("click", async (event) => {
     alert("请选择日期。");
     return;
   }
-  const currentMonth = monthSelect.value;
+  const currentMonth = getCurrentMonth();
   const monthItems = getMonthItems(transactions, currentMonth);
   const currentBalances = getWalletRemaining(monthItems);
   const currentValue = currentBalances[walletId] ?? 0;
@@ -861,7 +970,8 @@ walletList.addEventListener("click", async (event) => {
   }
 });
 
-monthSelect.value = getCurrentMonth();
+incomeStartDate.value = getMonthStartDate();
+expenseStartDate.value = getMonthStartDate();
 assetPoolSelect.disabled = false;
 resetForm();
 transferDate.valueAsDate = new Date();

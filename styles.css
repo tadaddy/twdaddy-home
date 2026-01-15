@@ -88,21 +88,6 @@ header.site-header {
   opacity: 0.85;
 }
 
-.month-picker {
-  background: rgba(255, 255, 255, 0.15);
-  padding: 1rem 1.25rem;
-  border-radius: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.month-picker input {
-  border: none;
-  border-radius: 0.5rem;
-  padding: 0.4rem 0.6rem;
-}
-
 main {
   max-width: 1100px;
   margin: -2rem auto 2rem;
@@ -133,6 +118,21 @@ main {
 .summary-card .hint {
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.mini-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.mini-field input {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
 }
 
 .summary-card.income h2 {
@@ -451,10 +451,6 @@ footer {
 
   main {
     margin-top: -1.2rem;
-  }
-
-  .month-picker {
-    width: 100%;
   }
 
   .table-header {
