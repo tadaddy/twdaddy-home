@@ -257,6 +257,32 @@ button.ghost {
   color: #0f172a;
 }
 
+.asset-pool-card {
+  margin-bottom: 1.5rem;
+}
+
+.asset-pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.asset-pool-item {
+  display: grid;
+  grid-template-columns: 1fr 160px auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.asset-pool-item input {
+  width: 100%;
+}
+
+.asset-pool-item button {
+  padding: 0.55rem 0.8rem;
+}
+
 .chart-header {
   display: flex;
   justify-content: space-between;

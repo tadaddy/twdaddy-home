@@ -6,6 +6,11 @@ const { URL } = require("url");
 const PORT = process.env.PORT || 9000;
 const DATA_FILE = path.join(__dirname, "data.json");
 const PUBLIC_ROOT = __dirname;
+const DEFAULT_POOLS = [
+  { id: "pool-1", name: "家庭备用金", amount: 0 },
+  { id: "pool-2", name: "旅行基金", amount: 0 },
+  { id: "pool-3", name: "教育基金", amount: 0 },
+];
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -14,13 +19,25 @@ const MIME_TYPES = {
   ".json": "application/json; charset=utf-8",
 };
 
+const normalizeData = (data) => {
+  if (Array.isArray(data)) {
+    return { transactions: data, pools: DEFAULT_POOLS };
+  }
+  if (!data || typeof data !== "object") {
+    return { transactions: [], pools: DEFAULT_POOLS };
+  }
+  const pools = Array.isArray(data.pools) ? data.pools : DEFAULT_POOLS;
+  const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+  return { transactions, pools };
+};
+
 const readData = async () => {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf8");
-    return JSON.parse(raw);
+    return normalizeData(JSON.parse(raw));
   } catch (error) {
     if (error.code === "ENOENT") {
-      return [];
+      return { transactions: [], pools: DEFAULT_POOLS };
     }
     throw error;
   }
@@ -68,8 +85,8 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/transactions" && req.method === "GET") {
     try {
-      const items = await readData();
-      return sendJson(res, 200, items);
+      const data = await readData();
+      return sendJson(res, 200, data.transactions);
     } catch (error) {
       return sendJson(res, 500, { error: "读取数据失败" });
     }
@@ -77,7 +94,8 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/transactions" && req.method === "DELETE") {
     try {
-      await writeData([]);
+      const data = await readData();
+      await writeData({ ...data, transactions: [] });
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "清空数据失败" });
@@ -88,9 +106,9 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
-      const items = await readData();
-      items.push(payload);
-      await writeData(items);
+      const data = await readData();
+      data.transactions.push(payload);
+      await writeData(data);
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "写入数据失败" });
@@ -100,12 +118,36 @@ const server = http.createServer(async (req, res) => {
   if (pathname.startsWith("/api/transactions/") && req.method === "DELETE") {
     try {
       const id = pathname.split("/").pop();
-      const items = await readData();
-      const nextItems = items.filter((item) => item.id !== id);
-      await writeData(nextItems);
+      const data = await readData();
+      const nextItems = data.transactions.filter((item) => item.id !== id);
+      await writeData({ ...data, transactions: nextItems });
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "删除数据失败" });
+    }
+  }
+
+  if (pathname === "/api/pools" && req.method === "GET") {
+    try {
+      const data = await readData();
+      return sendJson(res, 200, data.pools);
+    } catch (error) {
+      return sendJson(res, 500, { error: "读取资产池失败" });
+    }
+  }
+
+  if (pathname === "/api/pools" && req.method === "PUT") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : [];
+      if (!Array.isArray(payload)) {
+        return sendJson(res, 400, { error: "资产池格式错误" });
+      }
+      const data = await readData();
+      await writeData({ ...data, pools: payload });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存资产池失败" });
     }
   }
 

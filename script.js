@@ -22,11 +22,14 @@ const walletABalance = document.querySelector("#walletABalance");
 const walletBBalance = document.querySelector("#walletBBalance");
 const trendType = document.querySelector("#trendType");
 const trendChart = document.querySelector("#trendChart");
+const assetPoolList = document.querySelector("#assetPoolList");
+const addAssetPool = document.querySelector("#addAssetPool");
 
 const AUTH_KEY = "twdaddy-home-auth";
 const DASHBOARD_PASSWORD = "0303";
 const WALLET_MONTHLY_BUDGET = 5000;
 let transactions = [];
+let assetPools = [];
 
 const formatCurrency = (value) =>
   `¥${value.toLocaleString("zh-CN", {
@@ -63,6 +66,28 @@ const fetchTransactions = async () => {
   }
 };
 
+const fetchPools = async () => {
+  try {
+    assetPools = await apiRequest("/api/pools");
+  } catch (error) {
+    console.error("无法获取资产池数据", error);
+    alert("无法获取资产池数据，请确认服务器已启动。");
+    assetPools = [];
+  }
+};
+
+const savePools = async () => {
+  try {
+    await apiRequest("/api/pools", {
+      method: "PUT",
+      body: JSON.stringify(assetPools),
+    });
+  } catch (error) {
+    console.error("无法保存资产池", error);
+    alert("保存资产池失败，请稍后再试。");
+  }
+};
+
 const hideOverlay = () => {
   authOverlay.classList.add("hidden");
   authOverlay.style.display = "none";
@@ -73,7 +98,7 @@ const hideOverlay = () => {
 const showDashboard = async () => {
   hideOverlay();
   try {
-    await fetchTransactions();
+    await Promise.all([fetchTransactions(), fetchPools()]);
     updateView();
   } catch (error) {
     console.error("初始化失败", error);
@@ -199,6 +224,9 @@ const renderBreakdown = (items) => {
 
 const getMonthItems = (items, month) => items.filter((item) => item.date.startsWith(month));
 
+const getAssetPoolTotal = () =>
+  assetPools.reduce((sum, pool) => sum + (Number(pool.amount) || 0), 0);
+
 const getDaysInMonth = (month) => {
   const [year, monthIndex] = month.split("-").map(Number);
   return new Date(year, monthIndex, 0).getDate();
@@ -264,6 +292,7 @@ const updateView = () => {
   const wallets = getWalletRemaining(monthItems);
   walletABalance.textContent = formatCurrency(wallets.walletA);
   walletBBalance.textContent = formatCurrency(wallets.walletB);
+  renderAssetPools();
   assetTotal.textContent = formatCurrency(
     monthItems
       .filter((item) => item.type === "income")
@@ -272,10 +301,25 @@ const updateView = () => {
         .filter((item) => item.type === "expense")
         .reduce((sum, item) => sum + item.amount, 0) +
       wallets.walletA +
-      wallets.walletB
+      wallets.walletB +
+      getAssetPoolTotal()
   );
   renderBreakdown(monthItems);
   renderTrendChart(monthItems);
+};
+
+const renderAssetPools = () => {
+  assetPoolList.innerHTML = "";
+  assetPools.forEach((pool, index) => {
+    const row = document.createElement("div");
+    row.className = "asset-pool-item";
+    row.innerHTML = `
+      <input type="text" value="${pool.name}" data-index="${index}" data-field="name" />
+      <input type="number" min="0" step="0.01" value="${pool.amount}" data-index="${index}" data-field="amount" />
+      <button type="button" class="ghost" data-index="${index}" data-action="delete">删除</button>
+    `;
+    assetPoolList.appendChild(row);
+  });
 };
 
 const resetForm = () => {
@@ -374,6 +418,62 @@ clearAllButton.addEventListener("click", async () => {
     console.error("清空失败", error);
     alert("清空失败，请稍后再试。");
   }
+});
+
+addAssetPool.addEventListener("click", async () => {
+  assetPools.push({
+    id: `pool-${Date.now()}`,
+    name: "新资产池",
+    amount: 0,
+  });
+  renderAssetPools();
+  updateView();
+  await savePools();
+});
+
+assetPoolList.addEventListener("input", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  const index = Number(target.dataset.index);
+  const field = target.dataset.field;
+  if (Number.isNaN(index) || !assetPools[index]) {
+    return;
+  }
+  if (field === "name") {
+    assetPools[index].name = target.value;
+  }
+  if (field === "amount") {
+    assetPools[index].amount = Number(target.value) || 0;
+  }
+  updateView();
+});
+
+assetPoolList.addEventListener("change", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  await savePools();
+});
+
+assetPoolList.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) {
+    return;
+  }
+  if (target.dataset.action !== "delete") {
+    return;
+  }
+  const index = Number(target.dataset.index);
+  if (Number.isNaN(index) || !assetPools[index]) {
+    return;
+  }
+  assetPools.splice(index, 1);
+  renderAssetPools();
+  updateView();
+  await savePools();
 });
 
 monthSelect.value = getCurrentMonth();
