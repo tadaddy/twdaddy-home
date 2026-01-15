@@ -424,6 +424,10 @@ button.ghost {
   z-index: 20;
 }
 
+.modal.hidden {
+  display: none;
+}
+
 .modal-card {
   background: var(--card);
   width: min(640px, 100%);

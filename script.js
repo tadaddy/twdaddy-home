@@ -986,6 +986,12 @@ editForm.addEventListener("submit", async (event) => {
 
 cancelEdit.addEventListener("click", closeEditModal);
 
+editOverlay.addEventListener("click", (event) => {
+  if (event.target === editOverlay) {
+    closeEditModal();
+  }
+});
+
 addAssetPool.addEventListener("click", async () => {
   assetPools.push({
     id: `pool-${Date.now()}`,
