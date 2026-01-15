@@ -12,8 +12,7 @@ const monthSelect = document.querySelector("#monthSelect");
 const transactionList = document.querySelector("#transactionList");
 const incomeTotal = document.querySelector("#incomeTotal");
 const expenseTotal = document.querySelector("#expenseTotal");
-const balanceTotal = document.querySelector("#balanceTotal");
-const savingRate = document.querySelector("#savingRate");
+const assetPoolSelect = document.querySelector("#assetPoolSelect");
 const assetTotal = document.querySelector("#assetTotal");
 const breakdown = document.querySelector("#categoryBreakdown");
 const clearAllButton = document.querySelector("#clearAll");
@@ -125,6 +124,7 @@ const showDashboard = async () => {
     renderAssetPools();
     renderWallets();
     updateWalletOptions();
+    updateAssetPoolOptions();
     updateTrendOptions();
     updateView();
   } catch (error) {
@@ -185,13 +185,9 @@ const renderSummary = (items) => {
   const expense = items
     .filter((item) => item.type === "expense")
     .reduce((sum, item) => sum + item.amount, 0);
-  const balance = income - expense;
-  const rate = income === 0 ? 0 : (balance / income) * 100;
 
   incomeTotal.textContent = formatCurrency(income);
   expenseTotal.textContent = formatCurrency(expense);
-  balanceTotal.textContent = formatCurrency(balance);
-  savingRate.textContent = `${rate.toFixed(1)}%`;
 };
 
 const getWalletRemaining = (items) => {
@@ -253,7 +249,8 @@ const renderBreakdown = (items) => {
   });
 };
 
-const getMonthItems = (items, month) => items.filter((item) => item.date.startsWith(month));
+const getMonthItems = (items, month) =>
+  items.filter((item) => item.date.startsWith(month) && item.assetPool === "none");
 
 const getAssetPoolTotal = () =>
   assetPools.reduce((sum, pool) => sum + (Number(pool.amount) || 0), 0);
@@ -404,6 +401,17 @@ const updateWalletOptions = () => {
   }
 };
 
+const updateAssetPoolOptions = () => {
+  const currentValue = assetPoolSelect.value;
+  assetPoolSelect.innerHTML = `
+    <option value="none">不使用</option>
+    ${assetPools.map((pool) => `<option value="${pool.id}">${pool.name}</option>`).join("")}
+  `;
+  if (assetPoolSelect.querySelector(`option[value="${currentValue}"]`)) {
+    assetPoolSelect.value = currentValue;
+  }
+};
+
 const updateTrendOptions = () => {
   const currentValue = trendType.value;
   trendType.innerHTML = `
@@ -456,6 +464,7 @@ form.addEventListener("submit", async (event) => {
     date: dateInput.value,
     note: noteInput.value.trim(),
     wallet: typeSelect.value === "expense" ? walletSelect.value : "none",
+    assetPool: typeSelect.value === "income" ? assetPoolSelect.value : "none",
   };
 
   try {
@@ -511,8 +520,11 @@ typeSelect.addEventListener("change", () => {
   if (typeSelect.value === "income") {
     walletSelect.value = "none";
     walletSelect.disabled = true;
+    assetPoolSelect.disabled = false;
   } else {
     walletSelect.disabled = false;
+    assetPoolSelect.value = "none";
+    assetPoolSelect.disabled = true;
   }
 });
 
@@ -566,6 +578,7 @@ assetPoolList.addEventListener("change", async (event) => {
     return;
   }
   await savePools();
+  updateAssetPoolOptions();
 });
 
 assetPoolList.addEventListener("click", async (event) => {
@@ -584,6 +597,7 @@ assetPoolList.addEventListener("click", async (event) => {
   renderAssetPools();
   updateView();
   await savePools();
+  updateAssetPoolOptions();
 });
 
 walletList.addEventListener("input", (event) => {
@@ -674,5 +688,6 @@ walletList.addEventListener("click", async (event) => {
 
 monthSelect.value = getCurrentMonth();
 walletSelect.disabled = true;
+assetPoolSelect.disabled = false;
 resetForm();
 ensureAuthenticated();

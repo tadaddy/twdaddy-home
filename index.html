@@ -50,16 +50,6 @@
         <h2 id="expenseTotal">¥0</h2>
         <span class="hint">包含日常花费、还款等</span>
       </article>
-      <article class="summary-card balance">
-        <p>结余</p>
-        <h2 id="balanceTotal">¥0</h2>
-        <span class="hint">收入 - 支出</span>
-      </article>
-      <article class="summary-card rate">
-        <p>储蓄率</p>
-        <h2 id="savingRate">0%</h2>
-        <span class="hint">结余 / 收入</span>
-      </article>
       <article class="summary-card assets">
         <p>总资产</p>
         <h2 id="assetTotal">¥0</h2>
@@ -85,6 +75,14 @@
             <label>
               分类
               <input id="categoryInput" type="text" placeholder="如：餐饮、房贷、工资（可选）" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              资产池
+              <select id="assetPoolSelect">
+                <option value="none">不使用</option>
+              </select>
             </label>
           </div>
           <div class="form-row">
