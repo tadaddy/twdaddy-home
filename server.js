@@ -11,6 +11,10 @@ const DEFAULT_POOLS = [
   { id: "pool-2", name: "旅行基金", amount: 0 },
   { id: "pool-3", name: "教育基金", amount: 0 },
 ];
+const DEFAULT_WALLETS = [
+  { id: "walletA", name: "临时钱包 A", monthlyBudget: 5000 },
+  { id: "walletB", name: "临时钱包 B", monthlyBudget: 5000 },
+];
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -21,14 +25,15 @@ const MIME_TYPES = {
 
 const normalizeData = (data) => {
   if (Array.isArray(data)) {
-    return { transactions: data, pools: DEFAULT_POOLS };
+    return { transactions: data, pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS };
   }
   if (!data || typeof data !== "object") {
-    return { transactions: [], pools: DEFAULT_POOLS };
+    return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS };
   }
   const pools = Array.isArray(data.pools) ? data.pools : DEFAULT_POOLS;
+  const wallets = Array.isArray(data.wallets) ? data.wallets : DEFAULT_WALLETS;
   const transactions = Array.isArray(data.transactions) ? data.transactions : [];
-  return { transactions, pools };
+  return { transactions, pools, wallets };
 };
 
 const readData = async () => {
@@ -37,7 +42,7 @@ const readData = async () => {
     return normalizeData(JSON.parse(raw));
   } catch (error) {
     if (error.code === "ENOENT") {
-      return { transactions: [], pools: DEFAULT_POOLS };
+      return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS };
     }
     throw error;
   }
@@ -148,6 +153,30 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "保存资产池失败" });
+    }
+  }
+
+  if (pathname === "/api/wallets" && req.method === "GET") {
+    try {
+      const data = await readData();
+      return sendJson(res, 200, data.wallets);
+    } catch (error) {
+      return sendJson(res, 500, { error: "读取钱包失败" });
+    }
+  }
+
+  if (pathname === "/api/wallets" && req.method === "PUT") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : [];
+      if (!Array.isArray(payload)) {
+        return sendJson(res, 400, { error: "钱包格式错误" });
+      }
+      const data = await readData();
+      await writeData({ ...data, wallets: payload });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存钱包失败" });
     }
   }
 

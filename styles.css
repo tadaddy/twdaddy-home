@@ -248,6 +248,9 @@ button.ghost {
   border-radius: 0.9rem;
   padding: 1rem;
   background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .wallet-balance {
@@ -255,6 +258,28 @@ button.ghost {
   font-weight: 600;
   margin: 0.3rem 0;
   color: #0f172a;
+}
+
+.wallet-row {
+  display: grid;
+  grid-template-columns: 1fr 140px;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.wallet-actions {
+  display: grid;
+  grid-template-columns: 1fr 120px auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.wallet-actions input[type="date"] {
+  padding: 0.45rem 0.6rem;
+}
+
+.wallet-actions button {
+  padding: 0.55rem 0.9rem;
 }
 
 .asset-pool-card {

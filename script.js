@@ -18,8 +18,7 @@ const assetTotal = document.querySelector("#assetTotal");
 const breakdown = document.querySelector("#categoryBreakdown");
 const clearAllButton = document.querySelector("#clearAll");
 const walletSelect = document.querySelector("#walletSelect");
-const walletABalance = document.querySelector("#walletABalance");
-const walletBBalance = document.querySelector("#walletBBalance");
+const walletList = document.querySelector("#walletList");
 const trendType = document.querySelector("#trendType");
 const trendChart = document.querySelector("#trendChart");
 const assetPoolList = document.querySelector("#assetPoolList");
@@ -27,9 +26,9 @@ const addAssetPool = document.querySelector("#addAssetPool");
 
 const AUTH_KEY = "twdaddy-home-auth";
 const DASHBOARD_PASSWORD = "0303";
-const WALLET_MONTHLY_BUDGET = 5000;
 let transactions = [];
 let assetPools = [];
+let wallets = [];
 
 const formatCurrency = (value) =>
   `¥${value.toLocaleString("zh-CN", {
@@ -76,6 +75,28 @@ const fetchPools = async () => {
   }
 };
 
+const fetchWallets = async () => {
+  try {
+    wallets = await apiRequest("/api/wallets");
+  } catch (error) {
+    console.error("无法获取钱包数据", error);
+    alert("无法获取钱包数据，请确认服务器已启动。");
+    wallets = [];
+  }
+};
+
+const saveWallets = async () => {
+  try {
+    await apiRequest("/api/wallets", {
+      method: "PUT",
+      body: JSON.stringify(wallets),
+    });
+  } catch (error) {
+    console.error("无法保存钱包", error);
+    alert("保存钱包失败，请稍后再试。");
+  }
+};
+
 const savePools = async () => {
   try {
     await apiRequest("/api/pools", {
@@ -98,7 +119,10 @@ const hideOverlay = () => {
 const showDashboard = async () => {
   hideOverlay();
   try {
-    await Promise.all([fetchTransactions(), fetchPools()]);
+    await Promise.all([fetchTransactions(), fetchPools(), fetchWallets()]);
+    renderAssetPools();
+    renderWallets();
+    updateWalletOptions();
     updateView();
   } catch (error) {
     console.error("初始化失败", error);
@@ -168,21 +192,25 @@ const renderSummary = (items) => {
 };
 
 const getWalletRemaining = (items) => {
-  const walletTotals = {
-    walletA: WALLET_MONTHLY_BUDGET,
-    walletB: WALLET_MONTHLY_BUDGET,
-  };
+  const totals = {};
+  wallets.forEach((wallet) => {
+    totals[wallet.id] = wallet.monthlyBudget ?? 5000;
+  });
+
   items
-    .filter((item) => item.type === "expense")
+    .filter((item) => item.wallet && item.wallet !== "none")
     .forEach((item) => {
-      if (item.wallet === "walletA") {
-        walletTotals.walletA -= item.amount;
+      if (!(item.wallet in totals)) {
+        totals[item.wallet] = 0;
       }
-      if (item.wallet === "walletB") {
-        walletTotals.walletB -= item.amount;
+      if (item.type === "expense") {
+        totals[item.wallet] -= item.amount;
+      }
+      if (item.type === "income") {
+        totals[item.wallet] += item.amount;
       }
     });
-  return walletTotals;
+  return totals;
 };
 
 const renderBreakdown = (items) => {
@@ -290,9 +318,7 @@ const updateView = () => {
   renderTransactions(sorted);
   renderSummary(monthItems);
   const wallets = getWalletRemaining(monthItems);
-  walletABalance.textContent = formatCurrency(wallets.walletA);
-  walletBBalance.textContent = formatCurrency(wallets.walletB);
-  renderAssetPools();
+  updateWalletBalances(wallets);
   assetTotal.textContent = formatCurrency(
     monthItems
       .filter((item) => item.type === "income")
@@ -300,12 +326,57 @@ const updateView = () => {
       monthItems
         .filter((item) => item.type === "expense")
         .reduce((sum, item) => sum + item.amount, 0) +
-      wallets.walletA +
-      wallets.walletB +
+      Object.values(wallets).reduce((sum, value) => sum + value, 0) +
       getAssetPoolTotal()
   );
   renderBreakdown(monthItems);
   renderTrendChart(monthItems);
+};
+
+const renderWallets = () => {
+  walletList.innerHTML = "";
+  wallets.forEach((wallet) => {
+    const card = document.createElement("article");
+    card.className = "wallet-item";
+    card.innerHTML = `
+      <div class="wallet-row">
+        <input type="text" value="${wallet.name}" data-wallet-id="${wallet.id}" data-field="name" />
+        <span class="hint">每月 ¥${wallet.monthlyBudget ?? 5000}</span>
+      </div>
+      <div class="wallet-balance" data-wallet-balance="${wallet.id}">¥0</div>
+      <div class="wallet-actions">
+        <input type="number" min="0" step="0.01" placeholder="调整余额" data-wallet-id="${wallet.id}" data-field="target" />
+        <input type="date" data-wallet-id="${wallet.id}" data-field="date" />
+        <button type="button" class="primary" data-wallet-id="${wallet.id}" data-action="apply">更新</button>
+      </div>
+    `;
+    walletList.appendChild(card);
+  });
+};
+
+const updateWalletBalances = (walletTotals) => {
+  wallets.forEach((wallet) => {
+    const balance = walletTotals[wallet.id] ?? 0;
+    const balanceEl = walletList.querySelector(`[data-wallet-balance="${wallet.id}"]`);
+    const targetInput = walletList.querySelector(`input[data-wallet-id="${wallet.id}"][data-field="target"]`);
+    if (balanceEl) {
+      balanceEl.textContent = formatCurrency(balance);
+    }
+    if (targetInput && document.activeElement !== targetInput) {
+      targetInput.value = balance.toFixed(2);
+    }
+  });
+};
+
+const updateWalletOptions = () => {
+  const currentValue = walletSelect.value;
+  walletSelect.innerHTML = `
+    <option value="none">不使用</option>
+    ${wallets.map((wallet) => `<option value="${wallet.id}">${wallet.name}</option>`).join("")}
+  `;
+  if (walletSelect.querySelector(`option[value="${currentValue}"]`)) {
+    walletSelect.value = currentValue;
+  }
 };
 
 const renderAssetPools = () => {
@@ -474,6 +545,91 @@ assetPoolList.addEventListener("click", async (event) => {
   renderAssetPools();
   updateView();
   await savePools();
+});
+
+walletList.addEventListener("input", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  const walletId = target.dataset.walletId;
+  const field = target.dataset.field;
+  const wallet = wallets.find((item) => item.id === walletId);
+  if (!wallet || field !== "name") {
+    return;
+  }
+  wallet.name = target.value;
+});
+
+walletList.addEventListener("change", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  const walletId = target.dataset.walletId;
+  const field = target.dataset.field;
+  if (field === "name") {
+    const wallet = wallets.find((item) => item.id === walletId);
+    if (wallet) {
+      await saveWallets();
+      renderWallets();
+      updateWalletOptions();
+      updateView();
+    }
+  }
+});
+
+walletList.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) {
+    return;
+  }
+  if (target.dataset.action !== "apply") {
+    return;
+  }
+  const walletId = target.dataset.walletId;
+  const targetInput = walletList.querySelector(`input[data-wallet-id="${walletId}"][data-field="target"]`);
+  const dateInput = walletList.querySelector(`input[data-wallet-id="${walletId}"][data-field="date"]`);
+  if (!targetInput || !dateInput) {
+    return;
+  }
+  const targetValue = Number.parseFloat(targetInput.value);
+  if (Number.isNaN(targetValue)) {
+    alert("请输入有效金额。");
+    return;
+  }
+  if (!dateInput.value) {
+    alert("请选择日期。");
+    return;
+  }
+  const currentMonth = monthSelect.value;
+  const monthItems = getMonthItems(transactions, currentMonth);
+  const currentBalances = getWalletRemaining(monthItems);
+  const currentValue = currentBalances[walletId] ?? 0;
+  const diff = targetValue - currentValue;
+  if (Math.abs(diff) < 0.01) {
+    return;
+  }
+  const payload = {
+    id: Date.now().toString(),
+    type: diff > 0 ? "income" : "expense",
+    category: "钱包调整",
+    amount: Math.abs(diff),
+    date: dateInput.value,
+    note: `调整${walletId}`,
+    wallet: walletId,
+  };
+  try {
+    await apiRequest("/api/transactions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    await fetchTransactions();
+    updateView();
+  } catch (error) {
+    console.error("钱包调整失败", error);
+    alert("钱包调整失败，请稍后再试。");
+  }
 });
 
 monthSelect.value = getCurrentMonth();
