@@ -227,6 +227,34 @@ textarea {
   resize: vertical;
 }
 
+.memo-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.memo-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.memo-status,
+.memo-count {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.memo-status[data-state="pending"] {
+  color: #f59e0b;
+}
+
+.memo-status[data-state="error"] {
+  color: #dc2626;
+}
+
 button {
   cursor: pointer;
   border: none;

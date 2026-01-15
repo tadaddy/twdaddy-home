@@ -15,6 +15,7 @@ const DEFAULT_WALLETS = [
   { id: "walletA", name: "临时钱包 A", monthlyBudget: 5000 },
   { id: "walletB", name: "临时钱包 B", monthlyBudget: 5000 },
 ];
+const DEFAULT_MEMO = { content: "", updatedAt: "" };
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -25,15 +26,16 @@ const MIME_TYPES = {
 
 const normalizeData = (data) => {
   if (Array.isArray(data)) {
-    return { transactions: data, pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS };
+    return { transactions: data, pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
   }
   if (!data || typeof data !== "object") {
-    return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS };
+    return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
   }
   const pools = Array.isArray(data.pools) ? data.pools : DEFAULT_POOLS;
   const wallets = Array.isArray(data.wallets) ? data.wallets : DEFAULT_WALLETS;
   const transactions = Array.isArray(data.transactions) ? data.transactions : [];
-  return { transactions, pools, wallets };
+  const memo = data.memo && typeof data.memo === "object" ? data.memo : DEFAULT_MEMO;
+  return { transactions, pools, wallets, memo };
 };
 
 const readData = async () => {
@@ -42,7 +44,7 @@ const readData = async () => {
     return normalizeData(JSON.parse(raw));
   } catch (error) {
     if (error.code === "ENOENT") {
-      return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS };
+      return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
     }
     throw error;
   }
@@ -177,6 +179,31 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "保存钱包失败" });
+    }
+  }
+
+  if (pathname === "/api/memo" && req.method === "GET") {
+    try {
+      const data = await readData();
+      return sendJson(res, 200, data.memo || DEFAULT_MEMO);
+    } catch (error) {
+      return sendJson(res, 500, { error: "读取备忘录失败" });
+    }
+  }
+
+  if (pathname === "/api/memo" && req.method === "PUT") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : {};
+      if (!payload || typeof payload.content !== "string") {
+        return sendJson(res, 400, { error: "备忘录格式错误" });
+      }
+      const data = await readData();
+      const memo = { content: payload.content, updatedAt: payload.updatedAt || new Date().toISOString() };
+      await writeData({ ...data, memo });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存备忘录失败" });
     }
   }
 

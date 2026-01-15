@@ -35,6 +35,10 @@ const chartStartDate = document.querySelector("#chartStartDate");
 const chartEndDate = document.querySelector("#chartEndDate");
 const assetPoolList = document.querySelector("#assetPoolList");
 const addAssetPool = document.querySelector("#addAssetPool");
+const memoInput = document.querySelector("#memoInput");
+const memoStatus = document.querySelector("#memoStatus");
+const memoCount = document.querySelector("#memoCount");
+const saveMemoButton = document.querySelector("#saveMemo");
 const transferForm = document.querySelector("#transferForm");
 const transferFrom = document.querySelector("#transferFrom");
 const transferTo = document.querySelector("#transferTo");
@@ -59,6 +63,9 @@ let wallets = [];
 let walletBalances = {};
 let currentPage = 1;
 let editingItemId = null;
+let memoSaveTimer = null;
+
+const MEMO_MAX_LENGTH = 500;
 
 const formatCurrency = (value) =>
   `¥${value.toLocaleString("zh-CN", {
@@ -183,6 +190,66 @@ const savePools = async () => {
   }
 };
 
+const formatMemoTime = (timestamp) => {
+  if (!timestamp) {
+    return "暂无保存记录";
+  }
+  return new Date(timestamp).toLocaleString("zh-CN", { hour12: false });
+};
+
+const setMemoStatus = (message, state = "saved") => {
+  if (!memoStatus) {
+    return;
+  }
+  memoStatus.textContent = message;
+  memoStatus.dataset.state = state;
+};
+
+const updateMemoCount = () => {
+  if (!memoCount || !memoInput) {
+    return;
+  }
+  memoCount.textContent = `${memoInput.value.length}/${MEMO_MAX_LENGTH}`;
+};
+
+const fetchMemo = async () => {
+  if (!memoInput) {
+    return;
+  }
+  try {
+    const data = await apiRequest("/api/memo");
+    memoInput.value = data.content || "";
+    updateMemoCount();
+    setMemoStatus(`已保存 ${formatMemoTime(data.updatedAt)}`, "saved");
+  } catch (error) {
+    console.error("无法获取备忘录", error);
+    setMemoStatus("无法获取备忘录", "error");
+  }
+};
+
+const saveMemo = async ({ silent = false } = {}) => {
+  if (!memoInput) {
+    return;
+  }
+  const payload = {
+    content: memoInput.value,
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    await apiRequest("/api/memo", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    setMemoStatus(`已保存 ${formatMemoTime(payload.updatedAt)}`, "saved");
+  } catch (error) {
+    console.error("保存备忘录失败", error);
+    setMemoStatus("保存失败，请稍后重试", "error");
+    if (!silent) {
+      alert("保存备忘录失败，请稍后再试。");
+    }
+  }
+};
+
 const hideOverlay = () => {
   authOverlay.classList.add("hidden");
   authOverlay.style.display = "none";
@@ -193,7 +260,7 @@ const hideOverlay = () => {
 const showDashboard = async () => {
   hideOverlay();
   try {
-    await Promise.all([fetchTransactions(), fetchPools(), fetchWallets()]);
+    await Promise.all([fetchTransactions(), fetchPools(), fetchWallets(), fetchMemo()]);
     renderAssetPools();
     renderWallets();
     updateAssetPoolOptions();
@@ -1069,6 +1136,25 @@ assetPoolList.addEventListener("click", async (event) => {
   updateAssetPoolOptions();
   updateTransferOptions();
 });
+
+if (memoInput) {
+  memoInput.addEventListener("input", () => {
+    setMemoStatus("未保存", "pending");
+    updateMemoCount();
+    if (memoSaveTimer) {
+      clearTimeout(memoSaveTimer);
+    }
+    memoSaveTimer = setTimeout(() => {
+      saveMemo({ silent: true });
+    }, 800);
+  });
+}
+
+if (saveMemoButton) {
+  saveMemoButton.addEventListener("click", () => {
+    saveMemo();
+  });
+}
 
 walletList.addEventListener("input", (event) => {
   const target = event.target;

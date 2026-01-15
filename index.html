@@ -130,7 +130,19 @@
           <h3>备忘录</h3>
           <p>记录本月的重要事项或备注</p>
         </header>
-        <textarea id="memoInput" rows="6" placeholder="例如：房租缴费、保险到期等"></textarea>
+        <div class="memo-toolbar">
+          <p id="memoStatus" class="memo-status">未保存</p>
+          <div class="memo-actions">
+            <span id="memoCount" class="memo-count">0/500</span>
+            <button id="saveMemo" class="ghost" type="button">保存备忘录</button>
+          </div>
+        </div>
+        <textarea
+          id="memoInput"
+          rows="6"
+          maxlength="500"
+          placeholder="例如：房租缴费、保险到期等"
+        ></textarea>
       </section>
     </section>
 
