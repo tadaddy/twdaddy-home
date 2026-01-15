@@ -145,15 +145,27 @@
       <header class="chart-header">
         <div>
           <h3>趋势折线图</h3>
-          <p>按天查看收入或支出的变化趋势</p>
+          <p>横坐标为日期，纵坐标为金额，可缩放查看。</p>
         </div>
-        <label class="chart-toggle">
-          类目
-          <select id="trendType">
-            <option value="income">收入</option>
-            <option value="expense">支出</option>
-          </select>
-        </label>
+        <div class="chart-controls">
+          <label class="chart-toggle">
+            类目
+            <select id="trendType">
+              <option value="income">收入</option>
+              <option value="expense">支出</option>
+              <option value="walletA">临时钱包 A</option>
+              <option value="walletB">临时钱包 B</option>
+            </select>
+          </label>
+          <label class="chart-toggle">
+            缩放
+            <input id="trendZoom" type="range" min="7" max="31" step="1" value="31" />
+          </label>
+          <label class="chart-toggle">
+            视窗
+            <input id="trendOffset" type="range" min="0" max="0" step="1" value="0" />
+          </label>
+        </div>
       </header>
       <div id="trendChart" class="chart"></div>
     </section>

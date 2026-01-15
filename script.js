@@ -21,6 +21,8 @@ const walletSelect = document.querySelector("#walletSelect");
 const walletList = document.querySelector("#walletList");
 const trendType = document.querySelector("#trendType");
 const trendChart = document.querySelector("#trendChart");
+const trendZoom = document.querySelector("#trendZoom");
+const trendOffset = document.querySelector("#trendOffset");
 const assetPoolList = document.querySelector("#assetPoolList");
 const addAssetPool = document.querySelector("#addAssetPool");
 
@@ -123,6 +125,7 @@ const showDashboard = async () => {
     renderAssetPools();
     renderWallets();
     updateWalletOptions();
+    updateTrendOptions();
     updateView();
   } catch (error) {
     console.error("初始化失败", error);
@@ -260,7 +263,7 @@ const getDaysInMonth = (month) => {
   return new Date(year, monthIndex, 0).getDate();
 };
 
-const buildTrendSvg = (values, color) => {
+const buildTrendSvg = (values, color, labels) => {
   const width = 640;
   const height = 220;
   const padding = 24;
@@ -274,14 +277,20 @@ const buildTrendSvg = (values, color) => {
     })
     .join(" ");
 
+  const labelPoints = labels
+    .map((label, index) => {
+      if (index % Math.ceil(labels.length / 6) !== 0 && index !== labels.length - 1) {
+        return "";
+      }
+      const x = padding + index * step;
+      return `<text x="${x}" y="${height - 6}" font-size="10" fill="#94a3b8" text-anchor="middle">${label}</text>`;
+    })
+    .join("");
+
   return `
     <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="趋势折线图">
-      <polyline
-        fill="none"
-        stroke="#e2e8f0"
-        stroke-width="2"
-        points="${padding},${height - padding} ${width - padding},${height - padding}"
-      />
+      <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="#e2e8f0" stroke-width="2" />
+      <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="#e2e8f0" stroke-width="2" />
       <polyline
         fill="none"
         stroke="${color}"
@@ -290,6 +299,8 @@ const buildTrendSvg = (values, color) => {
         stroke-linejoin="round"
         points="${points}"
       />
+      ${labelPoints}
+      <text x="${padding}" y="${padding - 8}" font-size="10" fill="#94a3b8">¥${maxValue.toFixed(0)}</text>
     </svg>
   `;
 };
@@ -297,18 +308,32 @@ const buildTrendSvg = (values, color) => {
 const renderTrendChart = (items) => {
   const currentMonth = monthSelect.value;
   const daysInMonth = getDaysInMonth(currentMonth);
-  const values = Array.from({ length: daysInMonth }, () => 0);
+  const fullValues = Array.from({ length: daysInMonth }, () => 0);
   items
-    .filter((item) => item.type === trendType.value)
+    .filter((item) => {
+      if (trendType.value === "income" || trendType.value === "expense") {
+        return item.type === trendType.value;
+      }
+      return item.wallet === trendType.value;
+    })
     .forEach((item) => {
       const day = Number(item.date.split("-")[2]);
       if (!Number.isNaN(day) && day >= 1 && day <= daysInMonth) {
-        values[day - 1] += item.amount;
+        fullValues[day - 1] += item.amount;
       }
     });
 
-  const color = trendType.value === "income" ? "#16a34a" : "#dc2626";
-  trendChart.innerHTML = buildTrendSvg(values, color);
+  const zoomDays = Number(trendZoom.value);
+  trendZoom.max = daysInMonth.toString();
+  trendOffset.max = Math.max(daysInMonth - zoomDays, 0).toString();
+  const offset = Math.min(Number(trendOffset.value), Math.max(daysInMonth - zoomDays, 0));
+  trendOffset.value = offset.toString();
+
+  const values = fullValues.slice(offset, offset + zoomDays);
+  const labels = values.map((_, index) => `${offset + index + 1}日`);
+  const color =
+    trendType.value === "income" ? "#16a34a" : trendType.value === "expense" ? "#dc2626" : "#0ea5e9";
+  trendChart.innerHTML = buildTrendSvg(values, color, labels);
 };
 
 const updateView = () => {
@@ -376,6 +401,18 @@ const updateWalletOptions = () => {
   `;
   if (walletSelect.querySelector(`option[value="${currentValue}"]`)) {
     walletSelect.value = currentValue;
+  }
+};
+
+const updateTrendOptions = () => {
+  const currentValue = trendType.value;
+  trendType.innerHTML = `
+    <option value="income">收入</option>
+    <option value="expense">支出</option>
+    ${wallets.map((wallet) => `<option value="${wallet.id}">${wallet.name}</option>`).join("")}
+  `;
+  if (trendType.querySelector(`option[value="${currentValue}"]`)) {
+    trendType.value = currentValue;
   }
 };
 
@@ -467,6 +504,8 @@ transactionList.addEventListener("click", async (event) => {
 
 monthSelect.addEventListener("change", updateView);
 trendType.addEventListener("change", updateView);
+trendZoom.addEventListener("input", updateView);
+trendOffset.addEventListener("input", updateView);
 
 typeSelect.addEventListener("change", () => {
   if (typeSelect.value === "income") {
@@ -574,6 +613,7 @@ walletList.addEventListener("change", async (event) => {
       await saveWallets();
       renderWallets();
       updateWalletOptions();
+      updateTrendOptions();
       updateView();
     }
   }

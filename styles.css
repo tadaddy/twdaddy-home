@@ -317,12 +317,23 @@ button.ghost {
   margin-bottom: 1rem;
 }
 
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+}
+
 .chart-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.chart-toggle input[type="range"] {
+  width: 140px;
 }
 
 .chart {
