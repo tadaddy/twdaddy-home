@@ -317,6 +317,12 @@ button.ghost {
   color: var(--muted);
 }
 
+.transfer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .chart-header {
   display: flex;
   justify-content: space-between;

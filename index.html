@@ -130,6 +130,40 @@
     </section>
 
     <section class="card">
+      <header>
+        <h3>资产池互转</h3>
+        <p>在不同资产池之间转移余额，并自动记录流水。</p>
+      </header>
+      <form id="transferForm" class="transfer-form">
+        <div class="form-row">
+          <label>
+            转出资产池
+            <select id="transferFrom"></select>
+          </label>
+          <label>
+            转入资产池
+            <select id="transferTo"></select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>
+            金额 (¥)
+            <input id="transferAmount" type="number" min="0" step="0.01" placeholder="0.00" required />
+          </label>
+          <label>
+            日期
+            <input id="transferDate" type="date" required />
+          </label>
+        </div>
+        <label>
+          备注
+          <input id="transferNote" type="text" placeholder="如：资金调拨" />
+        </label>
+        <button type="submit" class="primary">确认互转</button>
+      </form>
+    </section>
+
+    <section class="card">
       <header class="chart-header">
         <div>
           <h3>趋势折线图</h3>

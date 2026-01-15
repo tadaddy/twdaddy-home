@@ -23,6 +23,12 @@ const trendZoom = document.querySelector("#trendZoom");
 const trendOffset = document.querySelector("#trendOffset");
 const assetPoolList = document.querySelector("#assetPoolList");
 const addAssetPool = document.querySelector("#addAssetPool");
+const transferForm = document.querySelector("#transferForm");
+const transferFrom = document.querySelector("#transferFrom");
+const transferTo = document.querySelector("#transferTo");
+const transferAmount = document.querySelector("#transferAmount");
+const transferDate = document.querySelector("#transferDate");
+const transferNote = document.querySelector("#transferNote");
 
 const AUTH_KEY = "twdaddy-home-auth";
 const DASHBOARD_PASSWORD = "0303";
@@ -124,6 +130,7 @@ const showDashboard = async () => {
     renderAssetPools();
     renderWallets();
     updateAssetPoolOptions();
+    updateTransferOptions();
     updateTrendOptions();
     updateView();
   } catch (error) {
@@ -437,6 +444,21 @@ const updateAssetPoolOptions = () => {
   }
 };
 
+const updateTransferOptions = () => {
+  const pools = getSelectablePools();
+  const currentFrom = transferFrom.value;
+  const currentTo = transferTo.value;
+  const options = pools.map((pool) => `<option value="${pool.id}">${pool.name}</option>`).join("");
+  transferFrom.innerHTML = options;
+  transferTo.innerHTML = options;
+  if (transferFrom.querySelector(`option[value="${currentFrom}"]`)) {
+    transferFrom.value = currentFrom;
+  }
+  if (transferTo.querySelector(`option[value="${currentTo}"]`)) {
+    transferTo.value = currentTo;
+  }
+};
+
 const updateTrendOptions = () => {
   const currentValue = trendType.value;
   trendType.innerHTML = `
@@ -597,6 +619,98 @@ clearAllButton.addEventListener("click", async () => {
   }
 });
 
+transferForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const fromId = transferFrom.value;
+  const toId = transferTo.value;
+  if (!fromId || !toId) {
+    alert("请选择转出与转入资产池。");
+    return;
+  }
+  if (fromId === toId) {
+    alert("转出与转入资产池不能相同。");
+    return;
+  }
+  const amount = Number.parseFloat(transferAmount.value);
+  if (Number.isNaN(amount) || amount <= 0) {
+    alert("请输入有效金额。");
+    return;
+  }
+  if (!transferDate.value) {
+    alert("请选择日期。");
+    return;
+  }
+
+  const pools = getSelectablePools();
+  const fromPool = pools.find((pool) => pool.id === fromId);
+  const toPool = pools.find((pool) => pool.id === toId);
+  if (!fromPool || !toPool) {
+    alert("资产池信息异常，请刷新页面重试。");
+    return;
+  }
+
+  const baseNote = transferNote.value.trim() || "资产池互转";
+  const expensePayload = {
+    id: `${Date.now()}-out`,
+    type: "expense",
+    category: "资产互转",
+    amount,
+    date: transferDate.value,
+    note: `${baseNote}（转出）`,
+    wallet: fromPool.type === "wallet" ? fromPool.id : "none",
+    assetPool: fromPool.id,
+  };
+  const incomePayload = {
+    id: `${Date.now()}-in`,
+    type: "income",
+    category: "资产互转",
+    amount,
+    date: transferDate.value,
+    note: `${baseNote}（转入）`,
+    wallet: toPool.type === "wallet" ? toPool.id : "none",
+    assetPool: toPool.id,
+  };
+
+  try {
+    await apiRequest("/api/transactions", {
+      method: "POST",
+      body: JSON.stringify(expensePayload),
+    });
+    await apiRequest("/api/transactions", {
+      method: "POST",
+      body: JSON.stringify(incomePayload),
+    });
+
+    const updatePoolAmount = (poolId, delta) => {
+      const poolIndex = assetPools.findIndex((pool) => pool.id === poolId);
+      if (poolIndex !== -1) {
+        assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
+      }
+    };
+
+    if (fromPool.type === "pool") {
+      updatePoolAmount(fromPool.id, -amount);
+    }
+    if (toPool.type === "pool") {
+      updatePoolAmount(toPool.id, amount);
+    }
+    if (fromPool.type === "pool" || toPool.type === "pool") {
+      await savePools();
+      renderAssetPools();
+      updateAssetPoolOptions();
+      updateTransferOptions();
+    }
+
+    await fetchTransactions();
+    updateView();
+    transferAmount.value = "";
+    transferNote.value = "";
+  } catch (error) {
+    console.error("互转失败", error);
+    alert("互转失败，请稍后再试。");
+  }
+});
+
 addAssetPool.addEventListener("click", async () => {
   assetPools.push({
     id: `pool-${Date.now()}`,
@@ -607,6 +721,7 @@ addAssetPool.addEventListener("click", async () => {
   updateView();
   await savePools();
   updateAssetPoolOptions();
+  updateTransferOptions();
 });
 
 assetPoolList.addEventListener("input", (event) => {
@@ -654,6 +769,7 @@ assetPoolList.addEventListener("click", async (event) => {
   updateView();
   await savePools();
   updateAssetPoolOptions();
+  updateTransferOptions();
 });
 
 walletList.addEventListener("input", (event) => {
@@ -684,6 +800,7 @@ walletList.addEventListener("change", async (event) => {
       renderWallets();
       renderAssetPools();
       updateAssetPoolOptions();
+      updateTransferOptions();
       updateTrendOptions();
       updateView();
     }
@@ -747,4 +864,5 @@ walletList.addEventListener("click", async (event) => {
 monthSelect.value = getCurrentMonth();
 assetPoolSelect.disabled = false;
 resetForm();
+transferDate.valueAsDate = new Date();
 ensureAuthenticated();
