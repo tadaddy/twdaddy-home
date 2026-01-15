@@ -520,6 +520,7 @@ form.addEventListener("submit", async (event) => {
         const delta = payload.type === "income" ? payload.amount : -payload.amount;
         assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
         await savePools();
+        renderAssetPools();
         updateAssetPoolOptions();
       }
     }
@@ -561,6 +562,7 @@ transactionList.addEventListener("click", async (event) => {
         const delta = toDelete.type === "income" ? -toDelete.amount : toDelete.amount;
         assetPools[poolIndex].amount = Number(assetPools[poolIndex].amount || 0) + delta;
         await savePools();
+        renderAssetPools();
         updateAssetPoolOptions();
       }
     }
