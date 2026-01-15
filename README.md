@@ -8,7 +8,7 @@
    ```bash
    node server.js
    ```
-2. 打开浏览器访问 `http://localhost:8000`。
+2. 打开浏览器访问 `http://localhost:9000`。
 3. 打开页面后输入密码 `0303` 进入看板（可在 `script.js` 中调整）。
 4. 在“新增记录”中填写信息，数据将保存在服务器端的 `data.json` 中，供家庭成员共享。
 
