@@ -56,16 +56,21 @@ const fetchTransactions = async () => {
   }
 };
 
-const setAuthenticated = () => {
-  sessionStorage.setItem(AUTH_KEY, "true");
+const showDashboard = async () => {
   authOverlay.classList.add("hidden");
   app.classList.remove("hidden");
+  await fetchTransactions();
+  updateView();
 };
 
-const ensureAuthenticated = () => {
+const setAuthenticated = async () => {
+  sessionStorage.setItem(AUTH_KEY, "true");
+  await showDashboard();
+};
+
+const ensureAuthenticated = async () => {
   if (sessionStorage.getItem(AUTH_KEY) === "true") {
-    authOverlay.classList.add("hidden");
-    app.classList.remove("hidden");
+    await showDashboard();
   }
 };
 
@@ -208,10 +213,10 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-authForm.addEventListener("submit", (event) => {
+authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (authPassword.value.trim() === DASHBOARD_PASSWORD) {
-    setAuthenticated();
+    await setAuthenticated();
     authPassword.value = "";
   } else {
     alert("密码错误，请重试。");
@@ -256,5 +261,4 @@ clearAllButton.addEventListener("click", async () => {
 
 monthSelect.value = getCurrentMonth();
 resetForm();
-fetchTransactions().then(updateView);
 ensureAuthenticated();
