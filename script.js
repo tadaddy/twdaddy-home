@@ -757,11 +757,11 @@ const applyPoolDelta = (poolId, delta) => {
   }
 };
 
-const transactionImpact = (item) => {
-  if (item.type === "income") {
+const getPoolDelta = (item) => {
+  if (item.type === "income" || item.type === "transfer-in") {
     return item.amount;
   }
-  if (item.type === "expense") {
+  if (item.type === "expense" || item.type === "transfer-out") {
     return -item.amount;
   }
   return 0;
@@ -975,9 +975,9 @@ transactionList.addEventListener("click", async (event) => {
   try {
     const toDelete = transactions.find((item) => item.id === id);
     await apiRequest(`/api/transactions/${id}`, { method: "DELETE" });
-    if (toDelete && (toDelete.type === "income" || toDelete.type === "expense")) {
-      if (!toDelete.assetPool.startsWith("wallet")) {
-        const delta = toDelete.type === "income" ? -toDelete.amount : toDelete.amount;
+    if (toDelete && toDelete.assetPool && !toDelete.assetPool.startsWith("wallet")) {
+      const delta = getPoolDelta(toDelete) * -1;
+      if (delta !== 0) {
         applyPoolDelta(toDelete.assetPool, delta);
         await savePools();
         renderAssetPools();
@@ -1225,12 +1225,12 @@ editForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(updated),
     });
 
-    const oldImpact = transactionImpact(original);
-    const newImpact = transactionImpact(updated);
-    if (original.assetPool && !original.assetPool.startsWith("wallet")) {
+    const oldImpact = getPoolDelta(original);
+    const newImpact = getPoolDelta(updated);
+    if (original.assetPool && !original.assetPool.startsWith("wallet") && oldImpact !== 0) {
       applyPoolDelta(original.assetPool, -oldImpact);
     }
-    if (updated.assetPool && !updated.assetPool.startsWith("wallet")) {
+    if (updated.assetPool && !updated.assetPool.startsWith("wallet") && newImpact !== 0) {
       applyPoolDelta(updated.assetPool, newImpact);
     }
     await savePools();
