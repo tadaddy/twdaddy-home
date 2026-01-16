@@ -41,7 +41,14 @@ const normalizeData = (data) => {
 const readData = async () => {
   try {
     const raw = await fs.readFile(DATA_FILE, "utf8");
-    return normalizeData(JSON.parse(raw));
+    try {
+      return normalizeData(JSON.parse(raw));
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
+      }
+      throw error;
+    }
   } catch (error) {
     if (error.code === "ENOENT") {
       return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
