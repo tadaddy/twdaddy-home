@@ -35,6 +35,7 @@ const pageNumber = document.querySelector("#pageNumber");
 const goPage = document.querySelector("#goPage");
 const globalStartDate = document.querySelector("#globalStartDate");
 const globalEndDate = document.querySelector("#globalEndDate");
+const adminToggle = document.querySelector("#adminToggle");
 const walletList = document.querySelector("#walletList");
 const trendType = document.querySelector("#trendType");
 const trendChart = document.querySelector("#trendChart");
@@ -52,6 +53,7 @@ const navItems = document.querySelectorAll(".nav-item");
 const dashboardView = document.querySelector("#dashboardView");
 const deletedView = document.querySelector("#deletedView");
 const infoView = document.querySelector("#infoView");
+const settingsView = document.querySelector("#settingsView");
 const addNoteButton = document.querySelector("#addNote");
 const noteList = document.querySelector("#noteList");
 const noteTitle = document.querySelector("#noteTitle");
@@ -78,9 +80,18 @@ const editAmount = document.querySelector("#editAmount");
 const editDate = document.querySelector("#editDate");
 const editNote = document.querySelector("#editNote");
 const cancelEdit = document.querySelector("#cancelEdit");
+const dashboardPasswordInput = document.querySelector("#dashboardPasswordInput");
+const adminPasswordInput = document.querySelector("#adminPasswordInput");
+const saveSettingsButton = document.querySelector("#saveSettings");
+const adminOnlyElements = document.querySelectorAll("[data-admin-only]");
 
 const AUTH_KEY = "twdaddy-home-auth";
-const DASHBOARD_PASSWORD = "0303";
+const ADMIN_KEY = "twdaddy-home-admin";
+const SETTINGS_KEY = "twdaddy-home-settings";
+const DEFAULT_SETTINGS = {
+  dashboardPassword: "0303",
+  adminPassword: "admin",
+};
 let transactions = [];
 let assetPools = [];
 let wallets = [];
@@ -91,6 +102,8 @@ let memoSaveTimer = null;
 let deletedTransactions = [];
 let notes = [];
 let activeNoteId = null;
+let settings = { ...DEFAULT_SETTINGS };
+let isAdmin = false;
 
 const MEMO_MAX_LENGTH = 5000;
 const TYPE_LABELS = {
@@ -131,6 +144,44 @@ const normalizeDateRange = (startDate, endDate) => {
   return { start, end };
 };
 
+const loadSettingsFromLocalStorage = () => {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    return {
+      dashboardPassword:
+        typeof parsed.dashboardPassword === "string" ? parsed.dashboardPassword : DEFAULT_SETTINGS.dashboardPassword,
+      adminPassword: typeof parsed.adminPassword === "string" ? parsed.adminPassword : DEFAULT_SETTINGS.adminPassword,
+    };
+  } catch (error) {
+    console.error("读取本地设置失败", error);
+    return null;
+  }
+};
+
+const saveSettingsToLocalStorage = (nextSettings) => {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(nextSettings));
+  } catch (error) {
+    console.error("保存本地设置失败", error);
+  }
+};
+
+const applySettingsToInputs = () => {
+  if (dashboardPasswordInput) {
+    dashboardPasswordInput.value = settings.dashboardPassword || "";
+  }
+  if (adminPasswordInput) {
+    adminPasswordInput.value = settings.adminPassword || "";
+  }
+};
+
 const isWithinRange = (dateValue, startDate, endDate) => {
   const { start, end } = normalizeDateRange(startDate, endDate);
   if (!start && !end) {
@@ -167,6 +218,45 @@ const apiRequest = async (url, options = {}) => {
     throw new Error("请求失败");
   }
   return response.json();
+};
+
+const fetchSettings = async () => {
+  try {
+    const data = await apiRequest("/api/settings");
+    if (data && typeof data === "object") {
+      settings = {
+        dashboardPassword:
+          typeof data.dashboardPassword === "string" ? data.dashboardPassword : DEFAULT_SETTINGS.dashboardPassword,
+        adminPassword: typeof data.adminPassword === "string" ? data.adminPassword : DEFAULT_SETTINGS.adminPassword,
+      };
+      saveSettingsToLocalStorage(settings);
+      applySettingsToInputs();
+      return;
+    }
+    throw new Error("invalid_settings");
+  } catch (error) {
+    console.error("无法获取设置", error);
+    const localSettings = loadSettingsFromLocalStorage();
+    settings = localSettings ? { ...DEFAULT_SETTINGS, ...localSettings } : { ...DEFAULT_SETTINGS };
+    applySettingsToInputs();
+  }
+};
+
+const saveSettings = async (nextSettings) => {
+  try {
+    await apiRequest("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(nextSettings),
+    });
+    settings = { ...nextSettings };
+    saveSettingsToLocalStorage(settings);
+    applySettingsToInputs();
+    return true;
+  } catch (error) {
+    console.error("保存设置失败", error);
+    alert("保存设置失败，请稍后再试。");
+    return false;
+  }
 };
 
 const fetchTransactions = async () => {
@@ -341,6 +431,35 @@ const saveMemo = async ({ silent = false } = {}) => {
   }
 };
 
+const updateAdminUI = () => {
+  if (adminToggle) {
+    adminToggle.textContent = isAdmin ? "退出管理员" : "管理员模式";
+  }
+  adminOnlyElements.forEach((element) => {
+    element.classList.toggle("hidden", !isAdmin);
+  });
+  if (clearAllButton) {
+    clearAllButton.disabled = !isAdmin;
+  }
+  if (purgeAllDeleted) {
+    purgeAllDeleted.disabled = !isAdmin;
+  }
+  updateView();
+};
+
+const setAdminMode = (enabled) => {
+  isAdmin = enabled;
+  if (enabled) {
+    sessionStorage.setItem(ADMIN_KEY, "true");
+  } else {
+    sessionStorage.removeItem(ADMIN_KEY);
+  }
+  updateAdminUI();
+  if (!enabled && (deletedView?.classList.contains("hidden") === false || settingsView?.classList.contains("hidden") === false)) {
+    switchView("dashboard");
+  }
+};
+
 const hideOverlay = () => {
   authOverlay.classList.add("hidden");
   authOverlay.style.display = "none";
@@ -382,7 +501,18 @@ const switchView = (view) => {
     dashboard: dashboardView,
     deleted: deletedView,
     info: infoView,
+    settings: settingsView,
   };
+  if ((view === "deleted" || view === "settings") && !isAdmin) {
+    alert("需要管理员模式才能访问此页面。");
+    views.dashboard?.classList.remove("hidden");
+    views.deleted?.classList.add("hidden");
+    views.settings?.classList.add("hidden");
+    navItems.forEach((button) => {
+      button.classList.toggle("active", button.dataset.view === "dashboard");
+    });
+    return;
+  }
   Object.entries(views).forEach(([key, section]) => {
     if (!section) {
       return;
@@ -409,6 +539,9 @@ const getAmountClass = (item) => {
 const createRow = (item) => {
   const poolName = getPoolName(item.assetPool);
   const tr = document.createElement("tr");
+  const adminActions = isAdmin
+    ? `<button class="ghost" data-id="${item.id}" data-action="delete">删除</button>`
+    : "";
   tr.innerHTML = `
     <td>${item.date}</td>
     <td><span class="tag ${item.type}">${getTypeLabel(item.type)}</span></td>
@@ -418,7 +551,7 @@ const createRow = (item) => {
     <td>${item.note || "-"}</td>
     <td>
       <button class="ghost" data-id="${item.id}" data-action="edit">编辑</button>
-      <button class="ghost" data-id="${item.id}" data-action="delete">删除</button>
+      ${adminActions}
     </td>
   `;
   return tr;
@@ -451,6 +584,16 @@ const renderDeletedTransactions = () => {
     return;
   }
   deletedList.innerHTML = "";
+  if (!isAdmin) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.className = "empty-state";
+    td.textContent = "需要管理员模式才能查看删除记录。";
+    tr.appendChild(td);
+    deletedList.appendChild(tr);
+    return;
+  }
   if (!deletedTransactions.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -1221,7 +1364,7 @@ form.addEventListener("submit", async (event) => {
 
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (authPassword.value.trim() === DASHBOARD_PASSWORD) {
+  if (authPassword.value.trim() === settings.dashboardPassword) {
     await setAuthenticated();
     authPassword.value = "";
   } else {
@@ -1248,6 +1391,10 @@ transactionList.addEventListener("click", async (event) => {
   }
 
   if (target.dataset.action !== "delete") {
+    return;
+  }
+  if (!isAdmin) {
+    alert("需要管理员模式才能删除记录。");
     return;
   }
 
@@ -1284,6 +1431,10 @@ if (deletedList) {
   deletedList.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) {
+      return;
+    }
+    if (!isAdmin) {
+      alert("需要管理员模式才能操作删除记录。");
       return;
     }
     const id = target.dataset.id;
@@ -1373,6 +1524,10 @@ pageSize.addEventListener("change", () => {
 
 if (purgeAllDeleted) {
   purgeAllDeleted.addEventListener("click", async () => {
+    if (!isAdmin) {
+      alert("需要管理员模式才能清空删除记录。");
+      return;
+    }
     if (!confirm("确认永久删除全部记录吗？此操作无法撤销。")) {
       return;
     }
@@ -1429,6 +1584,43 @@ navItems.forEach((button) => {
     }
   });
 });
+
+if (adminToggle) {
+  adminToggle.addEventListener("click", () => {
+    if (isAdmin) {
+      setAdminMode(false);
+      return;
+    }
+    const entered = prompt("请输入管理员密码：");
+    if (entered === null) {
+      return;
+    }
+    if (entered.trim() === settings.adminPassword) {
+      setAdminMode(true);
+    } else {
+      alert("管理员密码错误。");
+    }
+  });
+}
+
+if (saveSettingsButton) {
+  saveSettingsButton.addEventListener("click", async () => {
+    if (!isAdmin) {
+      alert("需要管理员模式才能保存设置。");
+      return;
+    }
+    const dashboardPassword = dashboardPasswordInput?.value.trim() || "";
+    const adminPassword = adminPasswordInput?.value.trim() || "";
+    if (!dashboardPassword || !adminPassword) {
+      alert("密码不能为空。");
+      return;
+    }
+    const success = await saveSettings({ dashboardPassword, adminPassword });
+    if (success) {
+      alert("设置已保存。");
+    }
+  });
+}
 
 if (addNoteButton) {
   addNoteButton.addEventListener("click", () => {
@@ -1612,6 +1804,10 @@ typeSelect.addEventListener("change", () => {
 });
 
 clearAllButton.addEventListener("click", async () => {
+  if (!isAdmin) {
+    alert("需要管理员模式才能清空记录。");
+    return;
+  }
   if (!confirm("确认清空全部记录吗？此操作无法撤销。")) {
     return;
   }
@@ -1960,10 +2156,17 @@ walletList.addEventListener("click", async (event) => {
   }
 });
 
-globalStartDate.value = getMonthStartDate();
-globalEndDate.value = getTodayDate();
-applyGlobalDateRange();
-assetPoolSelect.disabled = false;
-resetForm();
-transferDate.valueAsDate = new Date();
-ensureAuthenticated();
+const initializeApp = async () => {
+  globalStartDate.value = getMonthStartDate();
+  globalEndDate.value = getTodayDate();
+  applyGlobalDateRange();
+  assetPoolSelect.disabled = false;
+  resetForm();
+  transferDate.valueAsDate = new Date();
+  await fetchSettings();
+  isAdmin = sessionStorage.getItem(ADMIN_KEY) === "true";
+  updateAdminUI();
+  await ensureAuthenticated();
+};
+
+initializeApp();

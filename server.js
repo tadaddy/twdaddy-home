@@ -19,6 +19,10 @@ const DEFAULT_WALLETS = [
 const DEFAULT_MEMO = { content: "", updatedAt: "" };
 const DEFAULT_DELETED = [];
 const DEFAULT_NOTES = [];
+const DEFAULT_SETTINGS = {
+  dashboardPassword: "0303",
+  adminPassword: "admin",
+};
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -41,6 +45,7 @@ const normalizeData = (data) => {
       memo: DEFAULT_MEMO,
       deletedTransactions: DEFAULT_DELETED,
       notes: DEFAULT_NOTES,
+      settings: DEFAULT_SETTINGS,
     };
   }
   if (!data || typeof data !== "object") {
@@ -51,6 +56,7 @@ const normalizeData = (data) => {
       memo: DEFAULT_MEMO,
       deletedTransactions: DEFAULT_DELETED,
       notes: DEFAULT_NOTES,
+      settings: DEFAULT_SETTINGS,
     };
   }
   const pools = Array.isArray(data.pools) ? data.pools : DEFAULT_POOLS;
@@ -59,7 +65,8 @@ const normalizeData = (data) => {
   const memo = data.memo && typeof data.memo === "object" ? data.memo : DEFAULT_MEMO;
   const deletedTransactions = Array.isArray(data.deletedTransactions) ? data.deletedTransactions : DEFAULT_DELETED;
   const notes = Array.isArray(data.notes) ? data.notes : DEFAULT_NOTES;
-  return { transactions, pools, wallets, memo, deletedTransactions, notes };
+  const settings = data.settings && typeof data.settings === "object" ? data.settings : DEFAULT_SETTINGS;
+  return { transactions, pools, wallets, memo, deletedTransactions, notes, settings };
 };
 
 const readData = async () => {
@@ -76,6 +83,7 @@ const readData = async () => {
           memo: DEFAULT_MEMO,
           deletedTransactions: DEFAULT_DELETED,
           notes: DEFAULT_NOTES,
+          settings: DEFAULT_SETTINGS,
         };
       }
       throw error;
@@ -89,6 +97,7 @@ const readData = async () => {
         memo: DEFAULT_MEMO,
         deletedTransactions: DEFAULT_DELETED,
         notes: DEFAULT_NOTES,
+        settings: DEFAULT_SETTINGS,
       };
     }
     throw error;
@@ -419,6 +428,34 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "保存备忘录失败" });
+    }
+  }
+
+  if (pathname === "/api/settings" && req.method === "GET") {
+    try {
+      const data = await readData();
+      return sendJson(res, 200, data.settings || DEFAULT_SETTINGS);
+    } catch (error) {
+      return sendJson(res, 500, { error: "读取设置失败" });
+    }
+  }
+
+  if (pathname === "/api/settings" && req.method === "PUT") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : {};
+      if (!payload || typeof payload.dashboardPassword !== "string" || typeof payload.adminPassword !== "string") {
+        return sendJson(res, 400, { error: "设置格式错误" });
+      }
+      const data = await readData();
+      const settings = {
+        dashboardPassword: payload.dashboardPassword,
+        adminPassword: payload.adminPassword,
+      };
+      await writeData({ ...data, settings });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存设置失败" });
     }
   }
 
