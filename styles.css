@@ -117,11 +117,15 @@ body {
 }
 
 .note-item {
-  padding: 0.75rem;
+  padding: 0.4rem 0.75rem;
   border-radius: 0.75rem;
   border: 1px solid transparent;
   background: #f8fafc;
   cursor: pointer;
+}
+
+.note-item.dragging {
+  opacity: 0.5;
 }
 
 .note-item.active {
@@ -130,13 +134,13 @@ body {
 }
 
 .note-item h4 {
-  margin: 0 0 0.25rem;
-  font-size: 0.95rem;
+  margin: 0;
+  font-size: 0.9rem;
 }
 
 .note-item p {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 
@@ -155,6 +159,11 @@ body {
 .info-toolbar select,
 .info-toolbar input[type="color"] {
   height: 32px;
+}
+
+.info-toolbar label {
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .info-toolbar .ghost {
@@ -184,6 +193,18 @@ body {
   line-height: 1.6;
   color: var(--text);
   overflow-y: auto;
+}
+
+.note-image {
+  max-width: 100%;
+  height: auto;
+  resize: both;
+  overflow: auto;
+}
+
+.note-image.selected {
+  outline: 2px solid var(--primary);
+  border-radius: 0.4rem;
 }
 
 .note-content:empty::before {
@@ -264,6 +285,17 @@ header.site-header {
 
 .header-range {
   max-width: 360px;
+}
+
+.header-range .mini-field {
+  color: #e2e8f0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.header-range input,
+.header-range span {
+  color: #f8fafc;
 }
 
 @media (min-width: 900px) {
@@ -812,4 +844,7 @@ footer {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+.note-content font[size="7"] {
+  font-size: 28px;
 }

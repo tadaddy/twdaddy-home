@@ -62,6 +62,7 @@ const noteStatus = document.querySelector("#noteStatus");
 const noteFontSize = document.querySelector("#noteFontSize");
 const noteBold = document.querySelector("#noteBold");
 const noteColor = document.querySelector("#noteColor");
+const noteImageSize = document.querySelector("#noteImageSize");
 const transferForm = document.querySelector("#transferForm");
 const transferFrom = document.querySelector("#transferFrom");
 const transferTo = document.querySelector("#transferTo");
@@ -493,25 +494,35 @@ const setNoteContentValue = (value) => {
   }
 };
 
-const insertImageAtCursor = (dataUrl) => {
+const insertImageAtCursor = (src) => {
   if (!noteContent) {
     return;
   }
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) {
-    noteContent.insertAdjacentHTML("beforeend", `<img src="${dataUrl}" alt="note image" />`);
+    noteContent.insertAdjacentHTML("beforeend", `<img src="${src}" alt="note image" />`);
     return;
   }
   const range = selection.getRangeAt(0);
   range.deleteContents();
   const img = document.createElement("img");
-  img.src = dataUrl;
+  img.src = src;
   img.alt = "note image";
+  img.classList.add("note-image");
+  img.setAttribute("contenteditable", "false");
   range.insertNode(img);
   range.setStartAfter(img);
   range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
+};
+
+const uploadNoteImage = async (dataUrl) => {
+  const response = await apiRequest("/api/uploads", {
+    method: "POST",
+    body: JSON.stringify({ dataUrl }),
+  });
+  return response.url;
 };
 
 const applySelectionStyle = (command, value = null) => {
@@ -520,6 +531,33 @@ const applySelectionStyle = (command, value = null) => {
   }
   noteContent.focus();
   document.execCommand(command, false, value);
+};
+
+const clearImageSelection = () => {
+  if (!noteContent) {
+    return;
+  }
+  noteContent.querySelectorAll("img.note-image.selected").forEach((img) => {
+    img.classList.remove("selected");
+  });
+};
+
+const applyImageResize = (scale) => {
+  if (!noteContent) {
+    return;
+  }
+  const selected = noteContent.querySelector("img.note-image.selected");
+  if (!selected) {
+    return;
+  }
+  const width = selected.naturalWidth || selected.width;
+  const height = selected.naturalHeight || selected.height;
+  if (!width || !height) {
+    return;
+  }
+  selected.style.width = `${Math.round(width * scale)}px`;
+  selected.style.height = "auto";
+  setNoteStatus("未保存");
 };
 
 const renderNoteList = () => {
@@ -539,12 +577,23 @@ const renderNoteList = () => {
     const item = document.createElement("div");
     item.className = `note-item${note.id === activeNoteId ? " active" : ""}`;
     item.dataset.id = note.id;
+    item.draggable = true;
     item.innerHTML = `
       <h4>${note.title || "未命名笔记"}</h4>
-      <p>${note.updatedAt ? `更新于 ${new Date(note.updatedAt).toLocaleString("zh-CN", { hour12: false })}` : "未保存"}</p>
     `;
     noteList.appendChild(item);
   });
+};
+
+const persistNoteOrder = async () => {
+  try {
+    await apiRequest("/api/notes/order", {
+      method: "POST",
+      body: JSON.stringify({ order: notes.map((note) => note.id) }),
+    });
+  } catch (error) {
+    console.error("保存排序失败", error);
+  }
 };
 
 const selectNote = (noteId) => {
@@ -556,6 +605,7 @@ const selectNote = (noteId) => {
   if (noteContent) {
     setNoteContentValue(note?.content || "");
   }
+  clearImageSelection();
   setNoteStatus(note ? "已加载" : "未选择笔记");
   renderNoteList();
 };
@@ -1389,6 +1439,7 @@ if (addNoteButton) {
     if (noteContent) {
       setNoteContentValue("");
     }
+    clearImageSelection();
     setNoteStatus("新建笔记");
     renderNoteList();
   });
@@ -1402,6 +1453,48 @@ if (noteList) {
       return;
     }
     selectNote(item.dataset.id);
+  });
+
+  noteList.addEventListener("dragstart", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    if (!target.classList.contains("note-item")) {
+      return;
+    }
+    event.dataTransfer?.setData("text/plain", target.dataset.id || "");
+    target.classList.add("dragging");
+  });
+
+  noteList.addEventListener("dragend", async (event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement) {
+      target.classList.remove("dragging");
+    }
+    const newOrder = Array.from(noteList.querySelectorAll(".note-item"))
+      .map((item) => item.dataset.id)
+      .filter(Boolean);
+    notes = newOrder
+      .map((id) => notes.find((note) => note.id === id))
+      .filter(Boolean);
+    await persistNoteOrder();
+  });
+
+  noteList.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    const dragging = noteList.querySelector(".note-item.dragging");
+    if (!dragging) {
+      return;
+    }
+    const target = event.target;
+    const item = target instanceof HTMLElement ? target.closest(".note-item") : null;
+    if (!item || item === dragging) {
+      return;
+    }
+    const rect = item.getBoundingClientRect();
+    const shouldInsertBefore = event.clientY < rect.top + rect.height / 2;
+    noteList.insertBefore(dragging, shouldInsertBefore ? item : item.nextSibling);
   });
 }
 
@@ -1427,6 +1520,15 @@ if (noteContent) {
   noteContent.addEventListener("input", () => {
     setNoteStatus("未保存");
   });
+  noteContent.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLImageElement && target.classList.contains("note-image")) {
+      clearImageSelection();
+      target.classList.add("selected");
+      return;
+    }
+    clearImageSelection();
+  });
   noteContent.addEventListener("paste", (event) => {
     const clipboardItems = event.clipboardData?.items;
     if (!clipboardItems) {
@@ -1440,11 +1542,17 @@ if (noteContent) {
           continue;
         }
         const reader = new FileReader();
-        reader.onload = (loadEvent) => {
+        reader.onload = async (loadEvent) => {
           const result = loadEvent.target?.result;
           if (typeof result === "string") {
-            insertImageAtCursor(result);
-            setNoteStatus("未保存");
+            try {
+              const url = await uploadNoteImage(result);
+              insertImageAtCursor(url);
+              setNoteStatus("未保存");
+            } catch (error) {
+              console.error("上传图片失败", error);
+              alert("图片上传失败，请稍后再试。");
+            }
           }
         };
         reader.readAsDataURL(file);
@@ -1456,7 +1564,6 @@ if (noteContent) {
 
 if (noteFontSize) {
   noteFontSize.addEventListener("change", (event) => {
-    const value = event.target.value;
     const sizeMap = {
       "12": "2",
       "14": "3",
@@ -1466,7 +1573,12 @@ if (noteFontSize) {
       "24": "7",
       "28": "7",
     };
-    applySelectionStyle("fontSize", sizeMap[value] || "3");
+    applySelectionStyle("fontSize", sizeMap[event.target.value] || "3");
+    if (noteContent) {
+      noteContent.querySelectorAll("font[size=\"7\"]").forEach((fontEl) => {
+        fontEl.style.fontSize = "28px";
+      });
+    }
     setNoteStatus("未保存");
   });
 }
@@ -1482,6 +1594,16 @@ if (noteColor) {
   noteColor.addEventListener("change", (event) => {
     applySelectionStyle("foreColor", event.target.value);
     setNoteStatus("未保存");
+  });
+}
+
+if (noteImageSize) {
+  noteImageSize.addEventListener("change", (event) => {
+    const scale = Number.parseFloat(event.target.value);
+    if (Number.isNaN(scale)) {
+      return;
+    }
+    applyImageResize(scale);
   });
 }
 

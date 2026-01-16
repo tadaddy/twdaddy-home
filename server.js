@@ -6,6 +6,7 @@ const { URL } = require("url");
 const PORT = process.env.PORT || 9000;
 const DATA_FILE = path.join(__dirname, "data.json");
 const PUBLIC_ROOT = __dirname;
+const UPLOADS_DIR = path.join(__dirname, "uploads");
 const DEFAULT_POOLS = [
   { id: "pool-1", name: "家庭备用金", amount: 0 },
   { id: "pool-2", name: "旅行基金", amount: 0 },
@@ -24,6 +25,11 @@ const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
 };
 
 const normalizeData = (data) => {
@@ -111,6 +117,32 @@ const readBody = (req) =>
     req.on("end", () => resolve(body));
     req.on("error", reject);
   });
+
+const ensureUploadsDir = async () => {
+  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+};
+
+const saveUpload = async (dataUrl) => {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl || "");
+  if (!match) {
+    throw new Error("invalid_image");
+  }
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], "base64");
+  const extensionMap = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+  };
+  const ext = extensionMap[mimeType] || ".png";
+  await ensureUploadsDir();
+  const filename = `img-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
+  const filePath = path.join(UPLOADS_DIR, filename);
+  await fs.writeFile(filePath, buffer);
+  return `/uploads/${filename}`;
+};
 
 const serveFile = async (res, filePath) => {
   try {
@@ -314,6 +346,42 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "保存信息库失败" });
+    }
+  }
+
+  if (pathname === "/api/notes/order" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : null;
+      if (!payload || !Array.isArray(payload.order)) {
+        return sendJson(res, 400, { error: "排序格式错误" });
+      }
+      const data = await readData();
+      const notes = Array.isArray(data.notes) ? data.notes : [];
+      const orderMap = new Map(payload.order.map((id, index) => [id, index]));
+      notes.sort((a, b) => {
+        const indexA = orderMap.has(a.id) ? orderMap.get(a.id) : Number.MAX_SAFE_INTEGER;
+        const indexB = orderMap.has(b.id) ? orderMap.get(b.id) : Number.MAX_SAFE_INTEGER;
+        return indexA - indexB;
+      });
+      await writeData({ ...data, notes });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存排序失败" });
+    }
+  }
+
+  if (pathname === "/api/uploads" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : null;
+      if (!payload || typeof payload.dataUrl !== "string") {
+        return sendJson(res, 400, { error: "图片格式错误" });
+      }
+      const url = await saveUpload(payload.dataUrl);
+      return sendJson(res, 200, { url });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存图片失败" });
     }
   }
 
