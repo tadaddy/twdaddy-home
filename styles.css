@@ -476,6 +476,18 @@ button.ghost {
   margin-top: 1rem;
 }
 
+.page-jump {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.page-jump input {
+  width: 80px;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -537,6 +549,14 @@ tbody tr:hover {
 
 .tag.expense {
   background: var(--danger);
+}
+
+.tag.transfer-in {
+  background: #0ea5e9;
+}
+
+.tag.transfer-out {
+  background: #8b5cf6;
 }
 
 .empty-state {

@@ -133,14 +133,14 @@
         <div class="memo-toolbar">
           <p id="memoStatus" class="memo-status">未保存</p>
           <div class="memo-actions">
-            <span id="memoCount" class="memo-count">0/500</span>
+            <span id="memoCount" class="memo-count">0/5000</span>
             <button id="saveMemo" class="ghost" type="button">保存备忘录</button>
           </div>
         </div>
         <textarea
           id="memoInput"
           rows="10"
-          maxlength="500"
+          maxlength="5000"
           placeholder="例如：房租缴费、保险到期等"
         ></textarea>
       </section>
@@ -253,6 +253,32 @@
             <input id="detailEndDate" type="date" />
           </label>
           <label class="mini-field">
+            排序字段
+            <select id="sortField">
+              <option value="date">日期</option>
+              <option value="amount">金额</option>
+            </select>
+          </label>
+          <label class="mini-field">
+            排序顺序
+            <select id="sortOrder">
+              <option value="desc">降序</option>
+              <option value="asc">升序</option>
+            </select>
+          </label>
+          <label class="mini-field">
+            类型筛选
+            <select id="filterType"></select>
+          </label>
+          <label class="mini-field">
+            分类筛选
+            <select id="filterCategory"></select>
+          </label>
+          <label class="mini-field">
+            资产池筛选
+            <select id="filterAssetPool"></select>
+          </label>
+          <label class="mini-field">
             每页条目
             <select id="pageSize">
               <option value="20">20</option>
@@ -282,6 +308,11 @@
       <div class="pagination">
         <button id="prevPage" class="ghost" type="button">上一页</button>
         <span id="pageInfo">第 1 页</span>
+        <label class="page-jump">
+          跳转到
+          <input id="pageNumber" type="number" min="1" step="1" />
+        </label>
+        <button id="goPage" class="ghost" type="button">跳转</button>
         <button id="nextPage" class="ghost" type="button">下一页</button>
       </div>
     </section>

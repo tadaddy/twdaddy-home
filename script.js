@@ -20,10 +20,17 @@ const assetTotal = document.querySelector("#assetTotal");
 const clearAllButton = document.querySelector("#clearAll");
 const detailStartDate = document.querySelector("#detailStartDate");
 const detailEndDate = document.querySelector("#detailEndDate");
+const sortField = document.querySelector("#sortField");
+const sortOrder = document.querySelector("#sortOrder");
+const filterType = document.querySelector("#filterType");
+const filterCategory = document.querySelector("#filterCategory");
+const filterAssetPool = document.querySelector("#filterAssetPool");
 const pageSize = document.querySelector("#pageSize");
 const prevPage = document.querySelector("#prevPage");
 const nextPage = document.querySelector("#nextPage");
 const pageInfo = document.querySelector("#pageInfo");
+const pageNumber = document.querySelector("#pageNumber");
+const goPage = document.querySelector("#goPage");
 const globalStartDate = document.querySelector("#globalStartDate");
 const globalEndDate = document.querySelector("#globalEndDate");
 const walletList = document.querySelector("#walletList");
@@ -65,7 +72,13 @@ let currentPage = 1;
 let editingItemId = null;
 let memoSaveTimer = null;
 
-const MEMO_MAX_LENGTH = 500;
+const MEMO_MAX_LENGTH = 5000;
+const TYPE_LABELS = {
+  income: "收入",
+  expense: "支出",
+  "transfer-in": "资产转入",
+  "transfer-out": "资产转出",
+};
 
 const formatCurrency = (value) =>
   `¥${value.toLocaleString("zh-CN", {
@@ -319,12 +332,14 @@ const ensureAuthenticated = async () => {
   }
 };
 
+const getTypeLabel = (type) => TYPE_LABELS[type] || type;
+
 const createRow = (item) => {
   const poolName = getPoolName(item.assetPool);
   const tr = document.createElement("tr");
   tr.innerHTML = `
     <td>${item.date}</td>
-    <td><span class="tag ${item.type}">${item.type === "income" ? "收入" : "支出"}</span></td>
+    <td><span class="tag ${item.type}">${getTypeLabel(item.type)}</span></td>
     <td>${item.category}</td>
     <td>${poolName || "-"}</td>
     <td>${formatCurrency(item.amount)}</td>
@@ -583,10 +598,25 @@ const renderTrendChart = (items) => {
 
 const updateView = () => {
   const monthItems = transactions;
-  const sorted = [...monthItems].sort((a, b) => b.date.localeCompare(a.date));
-  const filtered = sorted.filter((item) =>
-    isWithinRange(item.date, detailStartDate.value, detailEndDate.value)
-  );
+  updateFilterOptions();
+  const filtered = monthItems
+    .filter((item) => isWithinRange(item.date, detailStartDate.value, detailEndDate.value))
+    .filter((item) => (filterType && filterType.value !== "all" ? item.type === filterType.value : true))
+    .filter((item) =>
+      filterCategory && filterCategory.value !== "all" ? item.category === filterCategory.value : true
+    )
+    .filter((item) =>
+      filterAssetPool && filterAssetPool.value !== "all" ? item.assetPool === filterAssetPool.value : true
+    );
+  const sortFieldValue = sortField?.value || "date";
+  const sortOrderValue = sortOrder?.value || "desc";
+  const direction = sortOrderValue === "asc" ? 1 : -1;
+  filtered.sort((a, b) => {
+    if (sortFieldValue === "amount") {
+      return (a.amount - b.amount) * direction;
+    }
+    return a.date.localeCompare(b.date) * direction;
+  });
   const pageSizeValue = Number(pageSize.value);
   const totalPages = Math.max(Math.ceil(filtered.length / pageSizeValue), 1);
   currentPage = Math.min(currentPage, totalPages);
@@ -601,6 +631,12 @@ const updateView = () => {
   assetTotal.textContent = formatCurrency(getAssetPoolTotal());
   renderTrendChart(monthItems);
   pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
+  if (pageNumber) {
+    pageNumber.max = totalPages.toString();
+    if (document.activeElement !== pageNumber) {
+      pageNumber.value = currentPage.toString();
+    }
+  }
   prevPage.disabled = currentPage <= 1;
   nextPage.disabled = currentPage >= totalPages;
 };
@@ -721,7 +757,15 @@ const applyPoolDelta = (poolId, delta) => {
   }
 };
 
-const transactionImpact = (item) => (item.type === "income" ? item.amount : -item.amount);
+const transactionImpact = (item) => {
+  if (item.type === "income") {
+    return item.amount;
+  }
+  if (item.type === "expense") {
+    return -item.amount;
+  }
+  return 0;
+};
 
 const openEditModal = (item) => {
   editingItemId = item.id;
@@ -758,6 +802,59 @@ const updateTrendOptions = () => {
   `;
   if (trendType.querySelector(`option[value="${currentValue}"]`)) {
     trendType.value = currentValue;
+  }
+};
+
+const buildFilterOptions = (values, currentValue, labelBuilder = (value) => value) => {
+  const options = [
+    { value: "all", label: "全部" },
+    ...values.map((value) => ({ value, label: labelBuilder(value) })),
+  ];
+  return {
+    options,
+    current: options.some((option) => option.value === currentValue) ? currentValue : "all",
+  };
+};
+
+const updateFilterOptions = () => {
+  const typeOrder = ["income", "expense", "transfer-in", "transfer-out"];
+  const typeValues = Array.from(new Set(transactions.map((item) => item.type))).sort((a, b) => {
+    const indexA = typeOrder.indexOf(a);
+    const indexB = typeOrder.indexOf(b);
+    if (indexA === -1 && indexB === -1) {
+      return a.localeCompare(b);
+    }
+    if (indexA === -1) {
+      return 1;
+    }
+    if (indexB === -1) {
+      return -1;
+    }
+    return indexA - indexB;
+  });
+  const categoryValues = Array.from(new Set(transactions.map((item) => item.category))).sort();
+  const assetPoolValues = Array.from(new Set(transactions.map((item) => item.assetPool))).sort();
+
+  if (filterType) {
+    const { options, current } = buildFilterOptions(typeValues, filterType.value, getTypeLabel);
+    filterType.innerHTML = options.map((option) => `<option value="${option.value}">${option.label}</option>`).join("");
+    filterType.value = current;
+  }
+
+  if (filterCategory) {
+    const { options, current } = buildFilterOptions(categoryValues, filterCategory.value);
+    filterCategory.innerHTML = options.map((option) => `<option value="${option.value}">${option.label}</option>`).join("");
+    filterCategory.value = current;
+  }
+
+  if (filterAssetPool) {
+    const { options, current } = buildFilterOptions(assetPoolValues, filterAssetPool.value, (value) =>
+      value === "none" ? "不使用" : getPoolName(value) || value
+    );
+    filterAssetPool.innerHTML = options
+      .map((option) => `<option value="${option.value}">${option.label}</option>`)
+      .join("");
+    filterAssetPool.value = current;
   }
 };
 
@@ -878,13 +975,15 @@ transactionList.addEventListener("click", async (event) => {
   try {
     const toDelete = transactions.find((item) => item.id === id);
     await apiRequest(`/api/transactions/${id}`, { method: "DELETE" });
-    if (toDelete && !toDelete.assetPool.startsWith("wallet")) {
-      const delta = toDelete.type === "income" ? -toDelete.amount : toDelete.amount;
-      applyPoolDelta(toDelete.assetPool, delta);
-      await savePools();
-      renderAssetPools();
-      updateAssetPoolOptions();
-      updateTransferOptions();
+    if (toDelete && (toDelete.type === "income" || toDelete.type === "expense")) {
+      if (!toDelete.assetPool.startsWith("wallet")) {
+        const delta = toDelete.type === "income" ? -toDelete.amount : toDelete.amount;
+        applyPoolDelta(toDelete.assetPool, delta);
+        await savePools();
+        renderAssetPools();
+        updateAssetPoolOptions();
+        updateTransferOptions();
+      }
     }
     await fetchTransactions();
     updateView();
@@ -905,6 +1004,26 @@ expenseStartDate.addEventListener("change", updateView);
 expenseEndDate.addEventListener("change", updateView);
 globalStartDate.addEventListener("change", applyGlobalDateRange);
 globalEndDate.addEventListener("change", applyGlobalDateRange);
+sortField.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
+sortOrder.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
+filterType.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
+filterCategory.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
+filterAssetPool.addEventListener("change", () => {
+  currentPage = 1;
+  updateView();
+});
 detailStartDate.addEventListener("change", () => {
   currentPage = 1;
   updateView();
@@ -927,6 +1046,30 @@ nextPage.addEventListener("click", () => {
   currentPage += 1;
   updateView();
 });
+
+const jumpToPage = () => {
+  if (!pageNumber) {
+    return;
+  }
+  const target = Number.parseInt(pageNumber.value, 10);
+  if (Number.isNaN(target)) {
+    return;
+  }
+  currentPage = Math.max(target, 1);
+  updateView();
+};
+
+if (goPage) {
+  goPage.addEventListener("click", jumpToPage);
+}
+
+if (pageNumber) {
+  pageNumber.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      jumpToPage();
+    }
+  });
+}
 
 typeSelect.addEventListener("change", () => {
   assetPoolSelect.disabled = false;
@@ -979,7 +1122,7 @@ transferForm.addEventListener("submit", async (event) => {
   const baseNote = transferNote.value.trim() || "资产池互转";
   const expensePayload = {
     id: `${Date.now()}-out`,
-    type: "expense",
+    type: "transfer-out",
     category: "资产互转",
     amount,
     date: transferDate.value,
@@ -989,7 +1132,7 @@ transferForm.addEventListener("submit", async (event) => {
   };
   const incomePayload = {
     id: `${Date.now()}-in`,
-    type: "income",
+    type: "transfer-in",
     category: "资产互转",
     amount,
     date: transferDate.value,
