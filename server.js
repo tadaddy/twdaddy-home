@@ -16,6 +16,8 @@ const DEFAULT_WALLETS = [
   { id: "walletB", name: "临时钱包 B", monthlyBudget: 5000 },
 ];
 const DEFAULT_MEMO = { content: "", updatedAt: "" };
+const DEFAULT_DELETED = [];
+const DEFAULT_NOTES = [];
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -26,16 +28,32 @@ const MIME_TYPES = {
 
 const normalizeData = (data) => {
   if (Array.isArray(data)) {
-    return { transactions: data, pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
+    return {
+      transactions: data,
+      pools: DEFAULT_POOLS,
+      wallets: DEFAULT_WALLETS,
+      memo: DEFAULT_MEMO,
+      deletedTransactions: DEFAULT_DELETED,
+      notes: DEFAULT_NOTES,
+    };
   }
   if (!data || typeof data !== "object") {
-    return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
+    return {
+      transactions: [],
+      pools: DEFAULT_POOLS,
+      wallets: DEFAULT_WALLETS,
+      memo: DEFAULT_MEMO,
+      deletedTransactions: DEFAULT_DELETED,
+      notes: DEFAULT_NOTES,
+    };
   }
   const pools = Array.isArray(data.pools) ? data.pools : DEFAULT_POOLS;
   const wallets = Array.isArray(data.wallets) ? data.wallets : DEFAULT_WALLETS;
   const transactions = Array.isArray(data.transactions) ? data.transactions : [];
   const memo = data.memo && typeof data.memo === "object" ? data.memo : DEFAULT_MEMO;
-  return { transactions, pools, wallets, memo };
+  const deletedTransactions = Array.isArray(data.deletedTransactions) ? data.deletedTransactions : DEFAULT_DELETED;
+  const notes = Array.isArray(data.notes) ? data.notes : DEFAULT_NOTES;
+  return { transactions, pools, wallets, memo, deletedTransactions, notes };
 };
 
 const readData = async () => {
@@ -45,13 +63,27 @@ const readData = async () => {
       return normalizeData(JSON.parse(raw));
     } catch (error) {
       if (error instanceof SyntaxError) {
-        return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
+        return {
+          transactions: [],
+          pools: DEFAULT_POOLS,
+          wallets: DEFAULT_WALLETS,
+          memo: DEFAULT_MEMO,
+          deletedTransactions: DEFAULT_DELETED,
+          notes: DEFAULT_NOTES,
+        };
       }
       throw error;
     }
   } catch (error) {
     if (error.code === "ENOENT") {
-      return { transactions: [], pools: DEFAULT_POOLS, wallets: DEFAULT_WALLETS, memo: DEFAULT_MEMO };
+      return {
+        transactions: [],
+        pools: DEFAULT_POOLS,
+        wallets: DEFAULT_WALLETS,
+        memo: DEFAULT_MEMO,
+        deletedTransactions: DEFAULT_DELETED,
+        notes: DEFAULT_NOTES,
+      };
     }
     throw error;
   }
@@ -186,6 +218,114 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     } catch (error) {
       return sendJson(res, 500, { error: "保存钱包失败" });
+    }
+  }
+
+  if (pathname === "/api/deleted" && req.method === "GET") {
+    try {
+      const data = await readData();
+      return sendJson(res, 200, data.deletedTransactions || []);
+    } catch (error) {
+      return sendJson(res, 500, { error: "读取删除记录失败" });
+    }
+  }
+
+  if (pathname === "/api/deleted" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : null;
+      if (!payload || typeof payload !== "object") {
+        return sendJson(res, 400, { error: "删除记录格式错误" });
+      }
+      const data = await readData();
+      data.deletedTransactions = [...(data.deletedTransactions || []), payload];
+      await writeData(data);
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存删除记录失败" });
+    }
+  }
+
+  if (pathname === "/api/deleted" && req.method === "DELETE") {
+    try {
+      const data = await readData();
+      await writeData({ ...data, deletedTransactions: [] });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "清空删除记录失败" });
+    }
+  }
+
+  if (pathname.startsWith("/api/deleted/") && req.method === "DELETE") {
+    try {
+      const id = pathname.split("/").pop();
+      const data = await readData();
+      const nextItems = (data.deletedTransactions || []).filter((item) => item.id !== id);
+      await writeData({ ...data, deletedTransactions: nextItems });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "删除记录失败" });
+    }
+  }
+
+  if (pathname.startsWith("/api/deleted/") && pathname.endsWith("/restore") && req.method === "POST") {
+    try {
+      const parts = pathname.split("/");
+      const id = parts[parts.length - 2];
+      const data = await readData();
+      const restored = (data.deletedTransactions || []).find((item) => item.id === id);
+      if (!restored) {
+        return sendJson(res, 404, { error: "未找到记录" });
+      }
+      const remaining = (data.deletedTransactions || []).filter((item) => item.id !== id);
+      const transactions = [...data.transactions, restored];
+      await writeData({ ...data, deletedTransactions: remaining, transactions });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "恢复记录失败" });
+    }
+  }
+
+  if (pathname === "/api/notes" && req.method === "GET") {
+    try {
+      const data = await readData();
+      return sendJson(res, 200, data.notes || []);
+    } catch (error) {
+      return sendJson(res, 500, { error: "读取信息库失败" });
+    }
+  }
+
+  if (pathname === "/api/notes" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : null;
+      if (!payload || typeof payload.title !== "string") {
+        return sendJson(res, 400, { error: "信息库格式错误" });
+      }
+      const data = await readData();
+      const notes = Array.isArray(data.notes) ? data.notes : [];
+      const existingIndex = notes.findIndex((note) => note.id === payload.id);
+      if (existingIndex !== -1) {
+        notes[existingIndex] = payload;
+      } else {
+        notes.unshift(payload);
+      }
+      await writeData({ ...data, notes });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "保存信息库失败" });
+    }
+  }
+
+  if (pathname.startsWith("/api/notes/") && req.method === "DELETE") {
+    try {
+      const id = pathname.split("/").pop();
+      const data = await readData();
+      const notes = (data.notes || []).filter((note) => note.id !== id);
+      await writeData({ ...data, notes });
+      return sendJson(res, 200, { ok: true });
+    } catch (error) {
+      return sendJson(res, 500, { error: "删除信息库失败" });
     }
   }
 

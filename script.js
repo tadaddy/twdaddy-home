@@ -9,6 +9,7 @@ const amountInput = document.querySelector("#amountInput");
 const dateInput = document.querySelector("#dateInput");
 const noteInput = document.querySelector("#noteInput");
 const transactionList = document.querySelector("#transactionList");
+const deletedList = document.querySelector("#deletedList");
 const incomeTotal = document.querySelector("#incomeTotal");
 const expenseTotal = document.querySelector("#expenseTotal");
 const incomeStartDate = document.querySelector("#incomeStartDate");
@@ -25,6 +26,7 @@ const sortOrder = document.querySelector("#sortOrder");
 const filterType = document.querySelector("#filterType");
 const filterCategory = document.querySelector("#filterCategory");
 const filterAssetPool = document.querySelector("#filterAssetPool");
+const purgeAllDeleted = document.querySelector("#purgeAllDeleted");
 const pageSize = document.querySelector("#pageSize");
 const prevPage = document.querySelector("#prevPage");
 const nextPage = document.querySelector("#nextPage");
@@ -46,6 +48,17 @@ const memoInput = document.querySelector("#memoInput");
 const memoStatus = document.querySelector("#memoStatus");
 const memoCount = document.querySelector("#memoCount");
 const saveMemoButton = document.querySelector("#saveMemo");
+const navItems = document.querySelectorAll(".nav-item");
+const dashboardView = document.querySelector("#dashboardView");
+const deletedView = document.querySelector("#deletedView");
+const infoView = document.querySelector("#infoView");
+const addNoteButton = document.querySelector("#addNote");
+const noteList = document.querySelector("#noteList");
+const noteTitle = document.querySelector("#noteTitle");
+const noteContent = document.querySelector("#noteContent");
+const saveNoteButton = document.querySelector("#saveNote");
+const deleteNoteButton = document.querySelector("#deleteNote");
+const noteStatus = document.querySelector("#noteStatus");
 const transferForm = document.querySelector("#transferForm");
 const transferFrom = document.querySelector("#transferFrom");
 const transferTo = document.querySelector("#transferTo");
@@ -71,6 +84,9 @@ let walletBalances = {};
 let currentPage = 1;
 let editingItemId = null;
 let memoSaveTimer = null;
+let deletedTransactions = [];
+let notes = [];
+let activeNoteId = null;
 
 const MEMO_MAX_LENGTH = 5000;
 const TYPE_LABELS = {
@@ -176,6 +192,28 @@ const fetchWallets = async () => {
     console.error("无法获取钱包数据", error);
     alert("无法获取钱包数据，请确认服务器已启动。");
     wallets = [];
+  }
+};
+
+const fetchDeletedTransactions = async () => {
+  try {
+    deletedTransactions = await apiRequest("/api/deleted");
+  } catch (error) {
+    console.error("无法获取删除记录", error);
+    deletedTransactions = [];
+  }
+};
+
+const fetchNotes = async () => {
+  try {
+    notes = await apiRequest("/api/notes");
+    if (!activeNoteId && notes.length) {
+      activeNoteId = notes[0].id;
+      selectNote(activeNoteId);
+    }
+  } catch (error) {
+    console.error("无法获取信息库", error);
+    notes = [];
   }
 };
 
@@ -308,14 +346,17 @@ const hideOverlay = () => {
 
 const showDashboard = async () => {
   hideOverlay();
+  switchView("dashboard");
   try {
-    await Promise.all([fetchTransactions(), fetchPools(), fetchWallets(), fetchMemo()]);
+    await Promise.all([fetchTransactions(), fetchPools(), fetchWallets(), fetchMemo(), fetchDeletedTransactions(), fetchNotes()]);
     renderAssetPools();
     renderWallets();
     updateAssetPoolOptions();
     updateTransferOptions();
     updateTrendOptions();
     updateView();
+    renderDeletedTransactions();
+    renderNoteList();
   } catch (error) {
     console.error("初始化失败", error);
   }
@@ -332,7 +373,34 @@ const ensureAuthenticated = async () => {
   }
 };
 
+const switchView = (view) => {
+  const views = {
+    dashboard: dashboardView,
+    deleted: deletedView,
+    info: infoView,
+  };
+  Object.entries(views).forEach(([key, section]) => {
+    if (!section) {
+      return;
+    }
+    section.classList.toggle("hidden", key !== view);
+  });
+  navItems.forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === view);
+  });
+};
+
 const getTypeLabel = (type) => TYPE_LABELS[type] || type;
+
+const getAmountClass = (item) => {
+  if (item.type === "income") {
+    return "amount-income";
+  }
+  if (item.type === "expense") {
+    return "amount-expense";
+  }
+  return "amount-transfer";
+};
 
 const createRow = (item) => {
   const poolName = getPoolName(item.assetPool);
@@ -342,7 +410,7 @@ const createRow = (item) => {
     <td><span class="tag ${item.type}">${getTypeLabel(item.type)}</span></td>
     <td>${item.category}</td>
     <td>${poolName || "-"}</td>
-    <td>${formatCurrency(item.amount)}</td>
+    <td class="amount-cell ${getAmountClass(item)}">${formatCurrency(item.amount)}</td>
     <td>${item.note || "-"}</td>
     <td>
       <button class="ghost" data-id="${item.id}" data-action="edit">编辑</button>
@@ -372,6 +440,127 @@ const renderTransactions = (items) => {
     const row = createRow(item);
     transactionList.appendChild(row);
   });
+};
+
+const renderDeletedTransactions = () => {
+  if (!deletedList) {
+    return;
+  }
+  deletedList.innerHTML = "";
+  if (!deletedTransactions.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.className = "empty-state";
+    td.textContent = "暂无删除记录。";
+    tr.appendChild(td);
+    deletedList.appendChild(tr);
+    return;
+  }
+  deletedTransactions.forEach((item) => {
+    const tr = document.createElement("tr");
+    const poolName = getPoolName(item.assetPool);
+    tr.innerHTML = `
+      <td>${item.date}</td>
+      <td><span class="tag ${item.type}">${getTypeLabel(item.type)}</span></td>
+      <td>${item.category}</td>
+      <td>${poolName || "-"}</td>
+      <td class="amount-cell ${getAmountClass(item)}">${formatCurrency(item.amount)}</td>
+      <td>${item.note || "-"}</td>
+      <td>
+        <button class="ghost" data-id="${item.id}" data-action="restore">恢复</button>
+        <button class="ghost" data-id="${item.id}" data-action="purge">永久删除</button>
+      </td>
+    `;
+    deletedList.appendChild(tr);
+  });
+};
+
+const setNoteStatus = (message) => {
+  if (noteStatus) {
+    noteStatus.textContent = message;
+  }
+};
+
+const renderNoteList = () => {
+  if (!noteList) {
+    return;
+  }
+  noteList.innerHTML = "";
+  if (!notes.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "暂无笔记，点击右上角新增。";
+    noteList.appendChild(empty);
+    setNoteStatus("未选择笔记");
+    return;
+  }
+  notes.forEach((note) => {
+    const item = document.createElement("div");
+    item.className = `note-item${note.id === activeNoteId ? " active" : ""}`;
+    item.dataset.id = note.id;
+    item.innerHTML = `
+      <h4>${note.title || "未命名笔记"}</h4>
+      <p>${note.updatedAt ? `更新于 ${new Date(note.updatedAt).toLocaleString("zh-CN", { hour12: false })}` : "未保存"}</p>
+    `;
+    noteList.appendChild(item);
+  });
+};
+
+const selectNote = (noteId) => {
+  const note = notes.find((item) => item.id === noteId);
+  activeNoteId = note?.id || null;
+  if (noteTitle) {
+    noteTitle.value = note?.title || "";
+  }
+  if (noteContent) {
+    noteContent.value = note?.content || "";
+  }
+  setNoteStatus(note ? "已加载" : "未选择笔记");
+  renderNoteList();
+};
+
+const upsertNote = async () => {
+  if (!noteTitle || !noteContent) {
+    return;
+  }
+  const payload = {
+    id: activeNoteId || Date.now().toString(),
+    title: noteTitle.value.trim() || "未命名笔记",
+    content: noteContent.value.trim(),
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    await apiRequest("/api/notes", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    activeNoteId = payload.id;
+    await fetchNotes();
+    renderNoteList();
+    setNoteStatus("已保存");
+  } catch (error) {
+    console.error("保存笔记失败", error);
+    setNoteStatus("保存失败，请稍后再试");
+  }
+};
+
+const removeNote = async () => {
+  if (!activeNoteId || !noteTitle || !noteContent) {
+    return;
+  }
+  try {
+    await apiRequest(`/api/notes/${activeNoteId}`, { method: "DELETE" });
+    activeNoteId = null;
+    noteTitle.value = "";
+    noteContent.value = "";
+    await fetchNotes();
+    renderNoteList();
+    setNoteStatus("已删除");
+  } catch (error) {
+    console.error("删除笔记失败", error);
+    setNoteStatus("删除失败，请稍后再试");
+  }
 };
 
 const renderSummary = (items) => {
@@ -975,6 +1164,14 @@ transactionList.addEventListener("click", async (event) => {
   try {
     const toDelete = transactions.find((item) => item.id === id);
     await apiRequest(`/api/transactions/${id}`, { method: "DELETE" });
+    if (toDelete) {
+      await apiRequest("/api/deleted", {
+        method: "POST",
+        body: JSON.stringify(toDelete),
+      });
+      await fetchDeletedTransactions();
+      renderDeletedTransactions();
+    }
     if (toDelete && toDelete.assetPool && !toDelete.assetPool.startsWith("wallet")) {
       const delta = getPoolDelta(toDelete) * -1;
       if (delta !== 0) {
@@ -992,6 +1189,53 @@ transactionList.addEventListener("click", async (event) => {
     alert("删除失败，请稍后再试。");
   }
 });
+
+if (deletedList) {
+  deletedList.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) {
+      return;
+    }
+    const id = target.dataset.id;
+    if (!id) {
+      return;
+    }
+    if (target.dataset.action === "restore") {
+      try {
+        const restoredItem = deletedTransactions.find((item) => item.id === id);
+        await apiRequest(`/api/deleted/${id}/restore`, { method: "POST" });
+        if (restoredItem && restoredItem.assetPool && !restoredItem.assetPool.startsWith("wallet")) {
+          const delta = getPoolDelta(restoredItem);
+          if (delta !== 0) {
+            applyPoolDelta(restoredItem.assetPool, delta);
+            await savePools();
+            renderAssetPools();
+            updateAssetPoolOptions();
+            updateTransferOptions();
+          }
+        }
+        await fetchTransactions();
+        await fetchDeletedTransactions();
+        renderDeletedTransactions();
+        updateView();
+      } catch (error) {
+        console.error("恢复失败", error);
+        alert("恢复失败，请稍后再试。");
+      }
+      return;
+    }
+    if (target.dataset.action === "purge") {
+      try {
+        await apiRequest(`/api/deleted/${id}`, { method: "DELETE" });
+        await fetchDeletedTransactions();
+        renderDeletedTransactions();
+      } catch (error) {
+        console.error("永久删除失败", error);
+        alert("永久删除失败，请稍后再试。");
+      }
+    }
+  });
+}
 
 trendType.addEventListener("change", updateView);
 trendZoom.addEventListener("input", updateView);
@@ -1036,6 +1280,22 @@ pageSize.addEventListener("change", () => {
   currentPage = 1;
   updateView();
 });
+
+if (purgeAllDeleted) {
+  purgeAllDeleted.addEventListener("click", async () => {
+    if (!confirm("确认永久删除全部记录吗？此操作无法撤销。")) {
+      return;
+    }
+    try {
+      await apiRequest("/api/deleted", { method: "DELETE" });
+      await fetchDeletedTransactions();
+      renderDeletedTransactions();
+    } catch (error) {
+      console.error("清空删除记录失败", error);
+      alert("清空删除记录失败，请稍后再试。");
+    }
+  });
+}
 prevPage.addEventListener("click", () => {
   if (currentPage > 1) {
     currentPage -= 1;
@@ -1068,6 +1328,64 @@ if (pageNumber) {
     if (event.key === "Enter") {
       jumpToPage();
     }
+  });
+}
+
+navItems.forEach((button) => {
+  button.addEventListener("click", () => {
+    const view = button.dataset.view;
+    if (view) {
+      switchView(view);
+    }
+  });
+});
+
+if (addNoteButton) {
+  addNoteButton.addEventListener("click", () => {
+    activeNoteId = null;
+    if (noteTitle) {
+      noteTitle.value = "";
+    }
+    if (noteContent) {
+      noteContent.value = "";
+    }
+    setNoteStatus("新建笔记");
+    renderNoteList();
+  });
+}
+
+if (noteList) {
+  noteList.addEventListener("click", (event) => {
+    const target = event.target;
+    const item = target.closest(".note-item");
+    if (!item) {
+      return;
+    }
+    selectNote(item.dataset.id);
+  });
+}
+
+if (saveNoteButton) {
+  saveNoteButton.addEventListener("click", () => {
+    upsertNote();
+  });
+}
+
+if (deleteNoteButton) {
+  deleteNoteButton.addEventListener("click", () => {
+    removeNote();
+  });
+}
+
+if (noteTitle) {
+  noteTitle.addEventListener("input", () => {
+    setNoteStatus("未保存");
+  });
+}
+
+if (noteContent) {
+  noteContent.addEventListener("input", () => {
+    setNoteStatus("未保存");
   });
 }
 

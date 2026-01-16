@@ -24,7 +24,17 @@
   </div>
 
   <div id="app" class="app hidden">
-    <header class="site-header">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-title">主界面</div>
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-view="dashboard">财务看板</button>
+          <button class="nav-item" data-view="deleted">明细删除记录</button>
+          <button class="nav-item" data-view="info">信息库</button>
+        </nav>
+      </aside>
+      <div class="app-content">
+        <header class="site-header">
     <div class="header-content">
       <div>
         <p class="eyebrow">家庭财务</p>
@@ -45,6 +55,7 @@
   </header>
 
     <main>
+    <section id="dashboardView" class="view-section">
     <section class="summary-grid">
       <article class="summary-card income">
         <p>收入</p>
@@ -316,11 +327,74 @@
         <button id="nextPage" class="ghost" type="button">下一页</button>
       </div>
     </section>
+    </section>
     </main>
+
+    <section id="deletedView" class="view-section hidden">
+      <header class="section-header">
+        <div>
+          <h2>明细删除记录</h2>
+          <p>已删除的流水明细可在此恢复或永久删除。</p>
+        </div>
+        <div class="section-actions">
+          <button id="purgeAllDeleted" class="ghost" type="button">全部永久删除记录</button>
+        </div>
+      </header>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>类型</th>
+              <th>分类</th>
+              <th>资产池</th>
+              <th>金额</th>
+              <th>备注</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="deletedList"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="infoView" class="view-section hidden">
+      <header class="section-header">
+        <div>
+          <h2>信息库</h2>
+          <p>记录标题与信息内容，随时编辑更新。</p>
+        </div>
+        <div class="section-actions">
+          <button id="addNote" class="primary" type="button">新增笔记</button>
+        </div>
+      </header>
+      <div class="info-layout">
+        <div class="info-list">
+          <div id="noteList" class="note-list"></div>
+        </div>
+        <div class="info-editor card">
+          <label>
+            标题
+            <input id="noteTitle" type="text" placeholder="输入标题" />
+          </label>
+          <label>
+            内容
+            <textarea id="noteContent" rows="12" placeholder="输入内容"></textarea>
+          </label>
+          <div class="info-actions">
+            <button id="saveNote" class="primary" type="button">保存</button>
+            <button id="deleteNote" class="ghost" type="button">删除</button>
+          </div>
+          <p id="noteStatus" class="info-status">未保存</p>
+        </div>
+      </div>
+    </section>
 
     <footer>
       <p>提示：建议定期备份服务器端的 data.json 文件。</p>
     </footer>
+      </div>
+    </div>
   </div>
 
   <div id="editOverlay" class="modal hidden">
@@ -335,6 +409,8 @@
             <select id="editType" required>
               <option value="income">收入</option>
               <option value="expense">支出</option>
+              <option value="transfer-in">资产转入</option>
+              <option value="transfer-out">资产转出</option>
             </select>
           </label>
           <label>
