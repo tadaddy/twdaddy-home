@@ -373,13 +373,40 @@
           <div id="noteList" class="note-list"></div>
         </div>
         <div class="info-editor card">
+          <div class="info-toolbar">
+            <label>
+              字号
+              <select id="noteFontSize">
+                <option value="12">12</option>
+                <option value="14" selected>14</option>
+                <option value="16">16</option>
+                <option value="18">18</option>
+                <option value="20">20</option>
+                <option value="24">24</option>
+                <option value="28">28</option>
+              </select>
+            </label>
+            <button id="noteBold" class="ghost" type="button"><strong>B</strong></button>
+            <label class="color-picker">
+              颜色
+              <input id="noteColor" type="color" value="#1c1f2a" />
+            </label>
+            <span class="info-hint">支持粘贴图片</span>
+          </div>
           <label>
             标题
             <input id="noteTitle" type="text" placeholder="输入标题" />
           </label>
           <label>
             内容
-            <textarea id="noteContent" rows="12" placeholder="输入内容"></textarea>
+            <div
+              id="noteContent"
+              class="note-content"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder="输入内容"
+            ></div>
           </label>
           <div class="info-actions">
             <button id="saveNote" class="primary" type="button">保存</button>

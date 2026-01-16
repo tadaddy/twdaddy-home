@@ -59,6 +59,9 @@ const noteContent = document.querySelector("#noteContent");
 const saveNoteButton = document.querySelector("#saveNote");
 const deleteNoteButton = document.querySelector("#deleteNote");
 const noteStatus = document.querySelector("#noteStatus");
+const noteFontSize = document.querySelector("#noteFontSize");
+const noteBold = document.querySelector("#noteBold");
+const noteColor = document.querySelector("#noteColor");
 const transferForm = document.querySelector("#transferForm");
 const transferFrom = document.querySelector("#transferFrom");
 const transferTo = document.querySelector("#transferTo");
@@ -482,6 +485,43 @@ const setNoteStatus = (message) => {
   }
 };
 
+const getNoteContentValue = () => (noteContent ? noteContent.innerHTML : "");
+
+const setNoteContentValue = (value) => {
+  if (noteContent) {
+    noteContent.innerHTML = value || "";
+  }
+};
+
+const insertImageAtCursor = (dataUrl) => {
+  if (!noteContent) {
+    return;
+  }
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    noteContent.insertAdjacentHTML("beforeend", `<img src="${dataUrl}" alt="note image" />`);
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const img = document.createElement("img");
+  img.src = dataUrl;
+  img.alt = "note image";
+  range.insertNode(img);
+  range.setStartAfter(img);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const applySelectionStyle = (command, value = null) => {
+  if (!noteContent) {
+    return;
+  }
+  noteContent.focus();
+  document.execCommand(command, false, value);
+};
+
 const renderNoteList = () => {
   if (!noteList) {
     return;
@@ -514,7 +554,7 @@ const selectNote = (noteId) => {
     noteTitle.value = note?.title || "";
   }
   if (noteContent) {
-    noteContent.value = note?.content || "";
+    setNoteContentValue(note?.content || "");
   }
   setNoteStatus(note ? "已加载" : "未选择笔记");
   renderNoteList();
@@ -527,7 +567,7 @@ const upsertNote = async () => {
   const payload = {
     id: activeNoteId || Date.now().toString(),
     title: noteTitle.value.trim() || "未命名笔记",
-    content: noteContent.value.trim(),
+    content: getNoteContentValue().trim(),
     updatedAt: new Date().toISOString(),
   };
   try {
@@ -553,7 +593,7 @@ const removeNote = async () => {
     await apiRequest(`/api/notes/${activeNoteId}`, { method: "DELETE" });
     activeNoteId = null;
     noteTitle.value = "";
-    noteContent.value = "";
+    setNoteContentValue("");
     await fetchNotes();
     renderNoteList();
     setNoteStatus("已删除");
@@ -1347,7 +1387,7 @@ if (addNoteButton) {
       noteTitle.value = "";
     }
     if (noteContent) {
-      noteContent.value = "";
+      setNoteContentValue("");
     }
     setNoteStatus("新建笔记");
     renderNoteList();
@@ -1385,6 +1425,62 @@ if (noteTitle) {
 
 if (noteContent) {
   noteContent.addEventListener("input", () => {
+    setNoteStatus("未保存");
+  });
+  noteContent.addEventListener("paste", (event) => {
+    const clipboardItems = event.clipboardData?.items;
+    if (!clipboardItems) {
+      return;
+    }
+    for (const item of clipboardItems) {
+      if (item.type.startsWith("image/")) {
+        event.preventDefault();
+        const file = item.getAsFile();
+        if (!file) {
+          continue;
+        }
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+          const result = loadEvent.target?.result;
+          if (typeof result === "string") {
+            insertImageAtCursor(result);
+            setNoteStatus("未保存");
+          }
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  });
+}
+
+if (noteFontSize) {
+  noteFontSize.addEventListener("change", (event) => {
+    const value = event.target.value;
+    const sizeMap = {
+      "12": "2",
+      "14": "3",
+      "16": "4",
+      "18": "5",
+      "20": "6",
+      "24": "7",
+      "28": "7",
+    };
+    applySelectionStyle("fontSize", sizeMap[value] || "3");
+    setNoteStatus("未保存");
+  });
+}
+
+if (noteBold) {
+  noteBold.addEventListener("click", () => {
+    applySelectionStyle("bold");
+    setNoteStatus("未保存");
+  });
+}
+
+if (noteColor) {
+  noteColor.addEventListener("change", (event) => {
+    applySelectionStyle("foreColor", event.target.value);
     setNoteStatus("未保存");
   });
 }

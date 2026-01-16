@@ -299,7 +299,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : null;
-      if (!payload || typeof payload.title !== "string") {
+      if (!payload || typeof payload.title !== "string" || typeof payload.content !== "string") {
         return sendJson(res, 400, { error: "信息库格式错误" });
       }
       const data = await readData();
