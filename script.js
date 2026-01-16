@@ -190,6 +190,8 @@ const savePools = async () => {
   }
 };
 
+const MEMO_STORAGE_KEY = "twdaddy-home-memo";
+
 const formatMemoTime = (timestamp) => {
   if (!timestamp) {
     return "暂无保存记录";
@@ -212,6 +214,30 @@ const updateMemoCount = () => {
   memoCount.textContent = `${memoInput.value.length}/${MEMO_MAX_LENGTH}`;
 };
 
+const loadMemoFromLocalStorage = () => {
+  try {
+    const raw = localStorage.getItem(MEMO_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const data = JSON.parse(raw);
+    if (!data || typeof data.content !== "string") {
+      return null;
+    }
+    return data;
+  } catch (error) {
+    return null;
+  }
+};
+
+const saveMemoToLocalStorage = (payload) => {
+  try {
+    localStorage.setItem(MEMO_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn("无法写入本地备忘录", error);
+  }
+};
+
 const fetchMemo = async () => {
   if (!memoInput) {
     return;
@@ -221,8 +247,16 @@ const fetchMemo = async () => {
     memoInput.value = data.content || "";
     updateMemoCount();
     setMemoStatus(`已保存 ${formatMemoTime(data.updatedAt)}`, "saved");
+    saveMemoToLocalStorage({ content: memoInput.value, updatedAt: data.updatedAt || "" });
   } catch (error) {
     console.error("无法获取备忘录", error);
+    const localMemo = loadMemoFromLocalStorage();
+    if (localMemo) {
+      memoInput.value = localMemo.content || "";
+      updateMemoCount();
+      setMemoStatus(`已从本地恢复 ${formatMemoTime(localMemo.updatedAt)}`, "pending");
+      return;
+    }
     setMemoStatus("无法获取备忘录", "error");
   }
 };
@@ -241,11 +275,13 @@ const saveMemo = async ({ silent = false } = {}) => {
       body: JSON.stringify(payload),
     });
     setMemoStatus(`已保存 ${formatMemoTime(payload.updatedAt)}`, "saved");
+    saveMemoToLocalStorage(payload);
   } catch (error) {
     console.error("保存备忘录失败", error);
-    setMemoStatus("保存失败，请稍后重试", "error");
+    saveMemoToLocalStorage(payload);
+    setMemoStatus("已保存到本地（服务器不可用）", "pending");
     if (!silent) {
-      alert("保存备忘录失败，请稍后再试。");
+      alert("服务器暂时不可用，备忘录已保存到本地。");
     }
   }
 };
