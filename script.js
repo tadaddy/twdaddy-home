@@ -400,10 +400,10 @@ const getWalletRemaining = (items) => {
       if (!(item.wallet in totals)) {
         totals[item.wallet] = 0;
       }
-      if (item.type === "expense") {
+      if (item.type === "expense" || item.type === "transfer-out") {
         totals[item.wallet] -= item.amount;
       }
-      if (item.type === "income") {
+      if (item.type === "income" || item.type === "transfer-in") {
         totals[item.wallet] += item.amount;
       }
     });
