@@ -436,17 +436,25 @@
           <p>管理进入密码与管理员密码。</p>
         </div>
       </header>
-      <div class="card settings-card">
-        <label>
-          进入密码
-          <input id="dashboardPasswordInput" type="password" placeholder="输入新密码" />
-        </label>
-        <label>
-          管理员密码
-          <input id="adminPasswordInput" type="password" placeholder="输入管理员密码" />
-        </label>
-        <div class="section-actions">
-          <button id="saveSettings" class="primary" type="button">保存设置</button>
+      <div class="settings-layout">
+        <aside class="settings-menu card">
+          <h3>子目录</h3>
+          <button class="settings-tab active" type="button">密码设置</button>
+        </aside>
+        <div class="card settings-card">
+          <h3>密码设置</h3>
+          <p class="settings-hint">初始密码用于进入看板；管理员密码为空时进入管理员模式不需要验证。</p>
+          <label>
+            进入密码
+            <input id="dashboardPasswordInput" type="password" placeholder="输入新密码" />
+          </label>
+          <label>
+            管理员密码
+            <input id="adminPasswordInput" type="password" placeholder="为空表示不设管理员密码" />
+          </label>
+          <div class="section-actions">
+            <button id="saveSettings" class="primary" type="button">保存设置</button>
+          </div>
         </div>
       </div>
     </section>

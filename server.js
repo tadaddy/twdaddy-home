@@ -21,7 +21,7 @@ const DEFAULT_DELETED = [];
 const DEFAULT_NOTES = [];
 const DEFAULT_SETTINGS = {
   dashboardPassword: "0303",
-  adminPassword: "admin",
+  adminPassword: "",
 };
 
 const MIME_TYPES = {

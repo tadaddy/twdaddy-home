@@ -90,7 +90,7 @@ const ADMIN_KEY = "twdaddy-home-admin";
 const SETTINGS_KEY = "twdaddy-home-settings";
 const DEFAULT_SETTINGS = {
   dashboardPassword: "0303",
-  adminPassword: "admin",
+  adminPassword: "",
 };
 let transactions = [];
 let assetPools = [];
@@ -118,6 +118,8 @@ const formatCurrency = (value) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+
+const formatSensitiveCurrency = (value) => (isAdmin ? formatCurrency(value) : "¥****");
 
 const getCurrentMonth = () => {
   const now = new Date();
@@ -444,6 +446,7 @@ const updateAdminUI = () => {
   if (purgeAllDeleted) {
     purgeAllDeleted.disabled = !isAdmin;
   }
+  renderAssetPools();
   updateView();
 };
 
@@ -634,6 +637,7 @@ const getNoteContentValue = () => (noteContent ? noteContent.innerHTML : "");
 const setNoteContentValue = (value) => {
   if (noteContent) {
     noteContent.innerHTML = value || "";
+    wrapNoteImages();
   }
 };
 
@@ -642,19 +646,23 @@ const insertImageAtCursor = (src) => {
     return;
   }
   const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    noteContent.insertAdjacentHTML("beforeend", `<img src="${src}" alt="note image" />`);
-    return;
-  }
-  const range = selection.getRangeAt(0);
-  range.deleteContents();
+  const wrapper = document.createElement("span");
+  wrapper.classList.add("note-image-wrapper");
+  wrapper.setAttribute("contenteditable", "false");
   const img = document.createElement("img");
   img.src = src;
   img.alt = "note image";
   img.classList.add("note-image");
   img.setAttribute("contenteditable", "false");
-  range.insertNode(img);
-  range.setStartAfter(img);
+  wrapper.appendChild(img);
+  if (!selection || selection.rangeCount === 0) {
+    noteContent.appendChild(wrapper);
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(wrapper);
+  range.setStartAfter(wrapper);
   range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
@@ -680,8 +688,8 @@ const clearImageSelection = () => {
   if (!noteContent) {
     return;
   }
-  noteContent.querySelectorAll("img.note-image.selected").forEach((img) => {
-    img.classList.remove("selected");
+  noteContent.querySelectorAll(".note-image-wrapper.selected").forEach((wrapper) => {
+    wrapper.classList.remove("selected");
   });
 };
 
@@ -689,18 +697,45 @@ const applyImageResize = (scale) => {
   if (!noteContent) {
     return;
   }
-  const selected = noteContent.querySelector("img.note-image.selected");
+  const selected = noteContent.querySelector(".note-image-wrapper.selected");
   if (!selected) {
     return;
   }
-  const width = selected.naturalWidth || selected.width;
-  const height = selected.naturalHeight || selected.height;
+  const img = selected.querySelector("img");
+  if (!img) {
+    return;
+  }
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
   if (!width || !height) {
     return;
   }
   selected.style.width = `${Math.round(width * scale)}px`;
   selected.style.height = "auto";
   setNoteStatus("未保存");
+};
+
+const wrapNoteImages = () => {
+  if (!noteContent) {
+    return;
+  }
+  const images = Array.from(noteContent.querySelectorAll("img"));
+  images.forEach((img) => {
+    if (img.closest(".note-image-wrapper")) {
+      return;
+    }
+    const wrapper = document.createElement("span");
+    wrapper.classList.add("note-image-wrapper");
+    wrapper.setAttribute("contenteditable", "false");
+    img.classList.add("note-image");
+    img.setAttribute("contenteditable", "false");
+    const parent = img.parentNode;
+    if (!parent) {
+      return;
+    }
+    parent.replaceChild(wrapper, img);
+    wrapper.appendChild(img);
+  });
 };
 
 const renderNoteList = () => {
@@ -806,8 +841,8 @@ const renderSummary = (items) => {
     .filter((item) => isWithinRange(item.date, expenseStartDate.value, expenseEndDate.value))
     .reduce((sum, item) => sum + item.amount, 0);
 
-  incomeTotal.textContent = formatCurrency(income);
-  expenseTotal.textContent = formatCurrency(expense);
+  incomeTotal.textContent = formatSensitiveCurrency(income);
+  expenseTotal.textContent = formatSensitiveCurrency(expense);
 };
 
 const getWalletRemaining = (items) => {
@@ -1050,7 +1085,7 @@ const updateView = () => {
   walletBalances = getWalletRemaining(monthItems);
   updateWalletBalances(walletBalances);
   updateAssetPoolInputs();
-  assetTotal.textContent = formatCurrency(getAssetPoolTotal());
+  assetTotal.textContent = formatSensitiveCurrency(getAssetPoolTotal());
   renderTrendChart(monthItems);
   pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
   if (pageNumber) {
@@ -1100,10 +1135,13 @@ const updateWalletBalances = (walletTotals) => {
   poolBalances.forEach((element) => {
     const walletId = element.dataset.walletPoolBalance;
     const balance = walletTotals[walletId] ?? 0;
-    element.textContent = `同步临时钱包 ${formatCurrency(balance)}`;
+    element.textContent = `同步临时钱包 ${formatSensitiveCurrency(balance)}`;
   });
   const poolInputs = assetPoolList.querySelectorAll("[data-wallet-pool-input]");
   poolInputs.forEach((element) => {
+    if (!isAdmin) {
+      return;
+    }
     const walletId = element.dataset.walletPoolInput;
     const balance = walletTotals[walletId] ?? 0;
     element.value = balance.toFixed(2);
@@ -1111,6 +1149,9 @@ const updateWalletBalances = (walletTotals) => {
 };
 
 const updateAssetPoolInputs = () => {
+  if (!isAdmin) {
+    return;
+  }
   const amountInputs = assetPoolList.querySelectorAll('input[data-field="amount"]');
   amountInputs.forEach((input) => {
     const index = Number(input.dataset.index);
@@ -1285,10 +1326,13 @@ const renderAssetPools = () => {
   assetPools.forEach((pool, index) => {
     const row = document.createElement("div");
     row.className = "asset-pool-item";
+    const amountValue = isAdmin ? Number(pool.amount || 0).toFixed(2) : "****";
+    const amountType = isAdmin ? "number" : "password";
+    const amountDisabled = isAdmin ? "" : "disabled";
     row.innerHTML = `
       <input type="text" value="${pool.name}" data-index="${index}" data-field="name" />
-      <input type="number" min="0" step="0.01" value="${pool.amount}" data-index="${index}" data-field="amount" />
-      <button type="button" class="ghost" data-index="${index}" data-action="delete">删除</button>
+      <input type="${amountType}" min="0" step="0.01" value="${amountValue}" data-index="${index}" data-field="amount" ${amountDisabled} />
+      <button type="button" class="ghost" data-index="${index}" data-action="delete" ${amountDisabled}>删除</button>
     `;
     assetPoolList.appendChild(row);
   });
@@ -1296,9 +1340,11 @@ const renderAssetPools = () => {
   wallets.forEach((wallet) => {
     const row = document.createElement("div");
     row.className = "asset-pool-item readonly";
+    const walletValue = isAdmin ? (walletBalances[wallet.id] ?? 0).toFixed(2) : "****";
+    const walletType = isAdmin ? "number" : "password";
     row.innerHTML = `
       <input type="text" value="${wallet.name}" readonly />
-      <input type="number" value="${(walletBalances[wallet.id] ?? 0).toFixed(2)}" data-wallet-pool-input="${wallet.id}" readonly />
+      <input type="${walletType}" value="${walletValue}" data-wallet-pool-input="${wallet.id}" readonly />
       <span class="asset-pool-note" data-wallet-pool-balance="${wallet.id}">同步临时钱包</span>
     `;
     assetPoolList.appendChild(row);
@@ -1591,6 +1637,10 @@ if (adminToggle) {
       setAdminMode(false);
       return;
     }
+    if (!settings.adminPassword) {
+      setAdminMode(true);
+      return;
+    }
     const entered = prompt("请输入管理员密码：");
     if (entered === null) {
       return;
@@ -1611,8 +1661,8 @@ if (saveSettingsButton) {
     }
     const dashboardPassword = dashboardPasswordInput?.value.trim() || "";
     const adminPassword = adminPasswordInput?.value.trim() || "";
-    if (!dashboardPassword || !adminPassword) {
-      alert("密码不能为空。");
+    if (!dashboardPassword) {
+      alert("进入密码不能为空。");
       return;
     }
     const success = await saveSettings({ dashboardPassword, adminPassword });
@@ -1714,9 +1764,12 @@ if (noteContent) {
   });
   noteContent.addEventListener("click", (event) => {
     const target = event.target;
-    if (target instanceof HTMLImageElement && target.classList.contains("note-image")) {
+    if (target instanceof HTMLElement && target.closest(".note-image-wrapper")) {
       clearImageSelection();
-      target.classList.add("selected");
+      const wrapper = target.closest(".note-image-wrapper");
+      if (wrapper) {
+        wrapper.classList.add("selected");
+      }
       return;
     }
     clearImageSelection();
