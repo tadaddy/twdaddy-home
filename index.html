@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家庭财务看板</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <div id="authOverlay" class="auth-overlay">
+    <div class="auth-card">
+      <h2>进入家庭财务看板</h2>
+      <p>请输入家庭共享密码以继续。</p>
+      <form id="authForm">
+        <label>
+          密码
+          <input id="authPassword" type="password" inputmode="numeric" placeholder="请输入密码" required />
+        </label>
+        <button type="submit" class="primary">进入看板</button>
+      </form>
+      <p class="auth-hint">默认密码：0303（可在脚本中修改）</p>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-title">主界面</div>
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-view="dashboard">财务看板</button>
+          <button class="nav-item" data-view="deleted" data-admin-only="true">明细删除记录</button>
+          <button class="nav-item" data-view="info">信息库</button>
+          <button class="nav-item" data-view="settings" data-admin-only="true">设置</button>
+        </nav>
+      </aside>
+      <div class="app-content">
+        <header class="site-header">
+    <div class="header-content">
+      <div>
+        <p class="eyebrow">家庭财务</p>
+        <h1>家庭财务看板</h1>
+        <p class="subtitle">在电脑或手机上快速更新收入与支出，随时查看家庭现金流。</p>
+      </div>
+      <div class="header-range">
+        <label class="mini-field">
+          全局日期范围
+          <div class="range-fields">
+            <input id="globalStartDate" type="date" />
+            <span>至</span>
+            <input id="globalEndDate" type="date" />
+          </div>
+        </label>
+        <button id="adminToggle" class="ghost admin-toggle" type="button">管理员模式</button>
+      </div>
+    </div>
+  </header>
+
+    <main>
+    <section id="dashboardView" class="view-section">
+    <section class="summary-grid">
+      <article class="summary-card income">
+        <p>收入</p>
+        <h2 id="incomeTotal">¥0</h2>
+        <label class="mini-field">
+          起始日期
+          <input id="incomeStartDate" type="date" />
+        </label>
+        <label class="mini-field">
+          结束日期
+          <input id="incomeEndDate" type="date" />
+        </label>
+        <span class="hint">包含工资、奖金、其他入账</span>
+      </article>
+      <article class="summary-card expense">
+        <p>支出</p>
+        <h2 id="expenseTotal">¥0</h2>
+        <label class="mini-field">
+          起始日期
+          <input id="expenseStartDate" type="date" />
+        </label>
+        <label class="mini-field">
+          结束日期
+          <input id="expenseEndDate" type="date" />
+        </label>
+        <span class="hint">包含日常花费、还款等</span>
+      </article>
+      <article class="summary-card assets">
+        <p>总资产</p>
+        <h2 id="assetTotal">¥0</h2>
+        <span class="hint">全部资产池余额合计</span>
+      </article>
+    </section>
+
+    <section class="layout-grid">
+      <section class="card">
+        <header>
+          <h3>新增记录</h3>
+          <p>随时记录家庭的收入与支出</p>
+        </header>
+        <form id="transactionForm">
+          <div class="form-row">
+            <label>
+              类型
+              <select id="typeSelect" required>
+                <option value="income">收入</option>
+                <option value="expense">支出</option>
+              </select>
+            </label>
+            <label>
+              分类
+              <input id="categoryInput" type="text" placeholder="如：餐饮、房贷、工资（可选）" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              资产池
+              <select id="assetPoolSelect">
+                <option value="none">不使用</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              金额 (¥)
+              <input id="amountInput" type="number" min="0" step="0.01" placeholder="0.00" required />
+            </label>
+            <label>
+              日期
+              <input id="dateInput" type="date" required />
+            </label>
+          </div>
+          <label>
+            备注
+            <input id="noteInput" type="text" placeholder="可选：工资到账、孩子教育" />
+          </label>
+          <button type="submit" class="primary">保存记录</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <header>
+          <h3>备忘录</h3>
+          <p>记录本月的重要事项或备注</p>
+        </header>
+        <div class="memo-toolbar">
+          <p id="memoStatus" class="memo-status">未保存</p>
+          <div class="memo-actions">
+            <span id="memoCount" class="memo-count">0/5000</span>
+            <button id="saveMemo" class="ghost" type="button">保存备忘录</button>
+          </div>
+        </div>
+        <textarea
+          id="memoInput"
+          rows="10"
+          maxlength="5000"
+          placeholder="例如：房租缴费、保险到期等"
+        ></textarea>
+      </section>
+    </section>
+
+    <section class="card wallet-card">
+      <header>
+        <h3>临时钱包</h3>
+        <p>每月每个钱包自动补充 ¥5,000，用于控制支出。</p>
+      </header>
+      <div id="walletList" class="wallet-grid"></div>
+    </section>
+
+    <section class="card asset-pool-card">
+      <header>
+        <h3>资产池</h3>
+        <p>可自定义名称与金额，用于记录家庭的资金池。</p>
+      </header>
+      <div id="assetPoolList" class="asset-pool-list"></div>
+      <button id="addAssetPool" class="ghost" type="button">新增资产池</button>
+    </section>
+
+    <section class="card">
+      <header>
+        <h3>资产池互转</h3>
+        <p>在不同资产池之间转移余额，并自动记录流水。</p>
+      </header>
+      <form id="transferForm" class="transfer-form">
+        <div class="form-row">
+          <label>
+            转出资产池
+            <select id="transferFrom"></select>
+          </label>
+          <label>
+            转入资产池
+            <select id="transferTo"></select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>
+            金额 (¥)
+            <input id="transferAmount" type="number" min="0" step="0.01" placeholder="0.00" required />
+          </label>
+          <label>
+            日期
+            <input id="transferDate" type="date" required />
+          </label>
+        </div>
+        <label>
+          备注
+          <input id="transferNote" type="text" placeholder="如：资金调拨" />
+        </label>
+        <button type="submit" class="primary">确认互转</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <header class="chart-header">
+        <div>
+          <h3>趋势折线图</h3>
+          <p>横坐标为日期，纵坐标为金额，可缩放查看。</p>
+        </div>
+        <div class="chart-controls">
+          <label class="chart-toggle">
+            开始日期
+            <input id="chartStartDate" type="date" />
+          </label>
+          <label class="chart-toggle">
+            结束日期
+            <input id="chartEndDate" type="date" />
+          </label>
+          <label class="chart-toggle">
+            类目
+            <select id="trendType">
+              <option value="income">收入（柱状）</option>
+              <option value="expense">支出（柱状）</option>
+              <option value="totalAssets">总资产（折线）</option>
+              <option value="walletA-expense">临时钱包 A 支出（柱状）</option>
+              <option value="walletA-asset">临时钱包 A 资产（折线）</option>
+              <option value="walletB-expense">临时钱包 B 支出（柱状）</option>
+              <option value="walletB-asset">临时钱包 B 资产（折线）</option>
+            </select>
+          </label>
+          <label class="chart-toggle">
+            缩放
+            <input id="trendZoom" type="range" min="7" max="31" step="1" value="31" />
+          </label>
+          <label class="chart-toggle">
+            视窗
+            <input id="trendOffset" type="range" min="0" max="0" step="1" value="0" />
+          </label>
+        </div>
+      </header>
+      <div id="trendChart" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <header class="table-header">
+        <div>
+          <h3>流水明细</h3>
+          <p>记录保存在服务器端，家庭成员可共享查看</p>
+        </div>
+        <div class="table-actions">
+          <label class="mini-field">
+            开始日期
+            <input id="detailStartDate" type="date" />
+          </label>
+          <label class="mini-field">
+            结束日期
+            <input id="detailEndDate" type="date" />
+          </label>
+          <label class="mini-field">
+            排序字段
+            <select id="sortField">
+              <option value="date">日期</option>
+              <option value="amount">金额</option>
+            </select>
+          </label>
+          <label class="mini-field">
+            排序顺序
+            <select id="sortOrder">
+              <option value="desc">降序</option>
+              <option value="asc">升序</option>
+            </select>
+          </label>
+          <label class="mini-field">
+            类型筛选
+            <select id="filterType"></select>
+          </label>
+          <label class="mini-field">
+            分类筛选
+            <select id="filterCategory"></select>
+          </label>
+          <label class="mini-field">
+            资产池筛选
+            <select id="filterAssetPool"></select>
+          </label>
+          <label class="mini-field">
+            每页条目
+            <select id="pageSize">
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <button id="clearAll" class="ghost" type="button">清空全部记录</button>
+        </div>
+      </header>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>类型</th>
+              <th>分类</th>
+              <th>资产池</th>
+              <th>金额</th>
+              <th>备注</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="transactionList"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <button id="prevPage" class="ghost" type="button">上一页</button>
+        <span id="pageInfo">第 1 页</span>
+        <label class="page-jump">
+          跳转到
+          <input id="pageNumber" type="number" min="1" step="1" />
+        </label>
+        <button id="goPage" class="ghost" type="button">跳转</button>
+        <button id="nextPage" class="ghost" type="button">下一页</button>
+      </div>
+    </section>
+    </section>
+    </main>
+
+    <section id="deletedView" class="view-section hidden">
+      <header class="section-header">
+        <div>
+          <h2>明细删除记录</h2>
+          <p>已删除的流水明细可在此恢复或永久删除。</p>
+        </div>
+        <div class="section-actions">
+          <button id="purgeAllDeleted" class="ghost" type="button">全部永久删除记录</button>
+        </div>
+      </header>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>类型</th>
+              <th>分类</th>
+              <th>资产池</th>
+              <th>金额</th>
+              <th>备注</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="deletedList"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="infoView" class="view-section hidden">
+      <header class="section-header">
+        <div>
+          <h2>信息库</h2>
+          <p>记录标题与信息内容，随时编辑更新。</p>
+        </div>
+        <div class="section-actions">
+          <button id="addNote" class="primary" type="button">新增笔记</button>
+        </div>
+      </header>
+      <div class="info-layout">
+        <div class="info-list">
+          <div id="noteList" class="note-list" draggable="false"></div>
+        </div>
+        <div class="info-editor card">
+          <div class="info-toolbar">
+            <label>
+              字号
+              <select id="noteFontSize">
+                <option value="12">12</option>
+                <option value="14" selected>14</option>
+                <option value="16">16</option>
+                <option value="18">18</option>
+                <option value="20">20</option>
+                <option value="24">24</option>
+                <option value="28">28</option>
+              </select>
+            </label>
+            <button id="noteBold" class="ghost" type="button"><strong>B</strong></button>
+            <label class="color-picker">
+              颜色
+              <input id="noteColor" type="color" value="#1c1f2a" />
+            </label>
+            <label>
+              图片大小
+              <select id="noteImageSize">
+                <option value="0.5">50%</option>
+                <option value="0.75">75%</option>
+                <option value="1" selected>100%</option>
+                <option value="1.25">125%</option>
+                <option value="1.5">150%</option>
+              </select>
+            </label>
+            <span class="info-hint">支持粘贴图片</span>
+          </div>
+          <label>
+            标题
+            <input id="noteTitle" type="text" placeholder="输入标题" />
+          </label>
+          <label>
+            内容
+            <div
+              id="noteContent"
+              class="note-content"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder="输入内容"
+            ></div>
+          </label>
+          <div class="info-actions">
+            <button id="saveNote" class="primary" type="button">保存</button>
+            <button id="deleteNote" class="ghost" type="button">删除</button>
+          </div>
+          <p id="noteStatus" class="info-status">未保存</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="settingsView" class="view-section hidden">
+      <header class="section-header">
+        <div>
+          <h2>设置</h2>
+          <p>管理进入密码与管理员密码。</p>
+        </div>
+      </header>
+      <div class="settings-layout">
+        <aside class="settings-menu card">
+          <h3>子目录</h3>
+          <button class="settings-tab active" type="button">密码设置</button>
+        </aside>
+        <div class="card settings-card">
+          <h3>密码设置</h3>
+          <p class="settings-hint">初始密码用于进入看板；管理员密码为空时进入管理员模式不需要验证。</p>
+          <label>
+            进入密码
+            <input id="dashboardPasswordInput" type="password" placeholder="输入新密码" />
+          </label>
+          <label>
+            管理员密码
+            <input id="adminPasswordInput" type="password" placeholder="为空表示不设管理员密码" />
+          </label>
+          <div class="section-actions">
+            <button id="saveSettings" class="primary" type="button">保存设置</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>提示：建议定期备份服务器端的 data.json 文件。</p>
+    </footer>
+      </div>
+    </div>
+  </div>
+
+  <div id="editOverlay" class="modal hidden">
+    <div class="modal-card">
+      <header>
+        <h3>编辑流水</h3>
+      </header>
+      <form id="editForm">
+        <div class="form-row">
+          <label>
+            类型
+            <select id="editType" required>
+              <option value="income">收入</option>
+              <option value="expense">支出</option>
+              <option value="transfer-in">资产转入</option>
+              <option value="transfer-out">资产转出</option>
+            </select>
+          </label>
+          <label>
+            资产池
+            <select id="editAssetPool"></select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>
+            分类
+            <input id="editCategory" type="text" />
+          </label>
+          <label>
+            金额
+            <input id="editAmount" type="number" min="0" step="0.01" required />
+          </label>
+        </div>
+        <div class="form-row">
+          <label>
+            日期
+            <input id="editDate" type="date" required />
+          </label>
+          <label>
+            备注
+            <input id="editNote" type="text" />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button id="cancelEdit" type="button" class="ghost">取消</button>
+          <button type="submit" class="primary">保存修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
