@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>联机国麻 MVP</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fa; }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+      .card { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      button { padding: 6px 10px; cursor: pointer; }
+      .tile { display: inline-block; border: 1px solid #ccc; background: #fff; border-radius: 4px; margin: 2px; padding: 4px 6px; cursor: pointer; }
+      .log { max-height: 180px; overflow: auto; font-size: 13px; background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 6px; }
+      .small { font-size: 13px; color: #444; }
+      .muted { color: #666; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="row">
+          <input id="name" placeholder="你的昵称" />
+          <input id="room" placeholder="房间号（如 1001）" />
+          <button id="createBtn">创建房间</button>
+          <button id="joinBtn">加入房间</button>
+          <button id="readyBtn">准备/取消准备</button>
+          <button id="startBtn">开始游戏</button>
+        </div>
+        <p class="small">规则：4人房，基础国麻流程，支持摸打、吃、碰、胡、过；服务端权威判定。</p>
+      </div>
+
+      <div class="card" id="status"></div>
+      <div class="card">
+        <h3>我的手牌（点击可出牌）</h3>
+        <div id="hand"></div>
+      </div>
+      <div class="card">
+        <h3>操作提示</h3>
+        <div id="claim"></div>
+      </div>
+      <div class="card">
+        <h3>日志</h3>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      let currentRoomId = '';
+      let lastState = null;
+
+      const $ = (id) => document.getElementById(id);
+      const logBox = $('log');
+
+      function log(msg) {
+        const line = document.createElement('div');
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+
+      function renderState(state) {
+        lastState = state;
+        const me = state.players.find(p => Array.isArray(p.hand));
+        const status = $('status');
+        status.innerHTML = `
+          <div>房间：${state.roomId} | 状态：${state.started ? '进行中' : '未开始'} | 当前回合：${state.currentTurn} | 牌墙：${state.wallCount}</div>
+          <div class="muted">上家弃牌：${state.lastDiscard ? `座位${state.lastDiscard.seat} -> ${state.lastDiscard.tile}` : '无'}</div>
+          <hr/>
+          ${state.players.map(p => `<div>座位${p.seat} ${p.name} ${p.ready ? '✅已准备' : '⌛未准备'} ${p.online ? '' : '(离线)'} | 手牌数:${p.handCount} | 副露:${JSON.stringify(p.melds)} | 弃牌:${p.discards.join(' ')}</div>`).join('')}
+          ${state.winner ? `<hr/><b>本局结束：${JSON.stringify(state.winner)}</b>` : ''}
+        `;
+
+        const hand = $('hand');
+        hand.innerHTML = '';
+        if (me && me.hand) {
+          me.hand.forEach(tile => {
+            const btn = document.createElement('span');
+            btn.className = 'tile';
+            btn.textContent = tile;
+            btn.onclick = () => {
+              if (!state.started) return;
+              socket.emit('discard', { roomId: currentRoomId, tile });
+            };
+            hand.appendChild(btn);
+          });
+        }
+      }
+
+      $('createBtn').onclick = () => {
+        const roomId = $('room').value.trim();
+        const name = $('name').value.trim() || '玩家';
+        currentRoomId = roomId;
+        socket.emit('create_room', { roomId, name });
+      };
+
+      $('joinBtn').onclick = () => {
+        const roomId = $('room').value.trim();
+        const name = $('name').value.trim() || '玩家';
+        currentRoomId = roomId;
+        socket.emit('join_room', { roomId, name });
+      };
+
+      $('readyBtn').onclick = () => {
+        socket.emit('toggle_ready', { roomId: currentRoomId });
+      };
+
+      $('startBtn').onclick = () => {
+        socket.emit('start_game', { roomId: currentRoomId });
+      };
+
+      socket.on('room_created', (roomId) => log(`房间 ${roomId} 创建成功`));
+      socket.on('joined_room', ({ roomId, seat }) => {
+        currentRoomId = roomId;
+        log(`加入房间 ${roomId}，座位 ${seat}`);
+      });
+      socket.on('state', (state) => renderState(state));
+      socket.on('log', (msg) => log(msg));
+      socket.on('error_message', (msg) => log(`错误：${msg}`));
+
+      socket.on('claim_options', ({ roomId, tile, fromSeat, canHu, canPeng, chiOptions }) => {
+        const box = $('claim');
+        box.innerHTML = '';
+        const title = document.createElement('div');
+        title.textContent = `你可对 座位${fromSeat} 打出的 ${tile} 操作：`;
+        box.appendChild(title);
+
+        const addBtn = (txt, payload) => {
+          const b = document.createElement('button');
+          b.textContent = txt;
+          b.onclick = () => {
+            socket.emit('claim', { roomId, ...payload });
+            box.innerHTML = '已提交操作';
+          };
+          box.appendChild(b);
+        };
+
+        if (canHu) addBtn('胡', { type: 'hu' });
+        if (canPeng) addBtn('碰', { type: 'peng' });
+        if (Array.isArray(chiOptions)) {
+          chiOptions.forEach((opt) => addBtn(`吃(${opt.join('+')})`, { type: 'chi', consumed: opt }));
+        }
+        addBtn('过', { type: 'pass' });
+      });
+    </script>
+  </body>
+</html>
